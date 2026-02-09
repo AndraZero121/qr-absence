@@ -1,8 +1,8 @@
-import SiswaLayout from "../../component/Siswa/SiswaLayout";
+import SiswaLayout, { type MenuKey } from "../../component/Siswa/SiswaLayout";
 
 import JadwalImg from "../../assets/Icon/DummyJadwal.png";
 
-type SiswaPage = "dashboard" | "jadwal-anda" | "notifikasi";
+type SiswaPage = MenuKey;
 
 interface JadwalSiswaProps {
     user: { name: string; phone: string };

@@ -11,7 +11,8 @@ import {
   FaEnvelope,
   FaPhoneAlt,
   FaCheckCircle,
-  FaExclamationCircle
+  FaExclamationCircle,
+
 } from "react-icons/fa";
 import { useNavigate } from "react-router-dom";
 import PageWrapper from "../../components/ui/PageWrapper";
@@ -28,12 +29,13 @@ export default function JadwalGuruIndex() {
       try {
         setLoading(true);
         const res = await apiClient.get('/teachers', { params: { per_page: -1 } });
-        setTeachers(res.data || []);
+        const data = res.data?.data || res.data || [];
+        setTeachers(Array.isArray(data) ? data : []);
       } catch (err) {
         console.error("Error fetching teachers for schedule:", err);
       } finally {
         setLoading(false);
-      }
+      } 
     };
     fetchTeachers();
   }, []);
@@ -106,13 +108,13 @@ export default function JadwalGuruIndex() {
 
                 <div className="grid grid-cols-2 gap-3">
                     <button
-                        onClick={() => navigate(`/waka/jadwal-guru/${item.id}`)}
+                        onClick={() => navigate(`${window.location.pathname}/${item.id}`)}
                         className="flex-1 bg-gray-900 text-white py-4 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all hover:bg-black active:scale-95 flex items-center justify-center gap-2"
                     >
                         <FaEye /> DETAIL
                     </button>
                     <button
-                        onClick={() => navigate(`/waka/jadwal-guru/${item.id}/edit`)}
+                        onClick={() => navigate(`${window.location.pathname}/${item.id}/edit`)}
                         className="flex-1 bg-indigo-50 text-indigo-700 border border-indigo-100 py-4 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all hover:bg-indigo-100 active:scale-95 flex items-center justify-center gap-2"
                     >
                         <FaEdit /> EDIT

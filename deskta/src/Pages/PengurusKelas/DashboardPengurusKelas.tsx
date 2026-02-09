@@ -574,7 +574,7 @@ export default function DashboardPengurusKelas({
 
       {/* QR Generate Button - Floating Action Button */}
       {currentPage === "Beranda" && (
-        <QRGenerateButton schedules={schedules} />
+        <QRGenerateButton schedules={todaySchedules} />
       )}
     </PengurusKelasLayout>
   );

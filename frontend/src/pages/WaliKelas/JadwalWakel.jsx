@@ -24,7 +24,7 @@ const JadwalWakel = () => {
           try {
             const url = await getClassScheduleImage(classId);
             setScheduleUrl(url);
-          } catch (e) {
+          } catch {
             console.warn("No custom schedule image found");
           }
         }

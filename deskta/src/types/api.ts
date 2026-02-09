@@ -4,6 +4,7 @@ export interface User {
   name: string;
   email?: string;
   phone?: string;
+  user_type?: string;
   role: string;
   nip?: string;
   nisn?: string;
@@ -242,4 +243,45 @@ export interface ApiError {
   message: string;
   errors?: Record<string, string[]>;
   status?: number;
+}
+
+// Waka Dashboard Types
+export interface WakaStatistik {
+  hadir: number;
+  terlambat: number;
+  izin: number;
+  sakit: number;
+  alpha: number;
+  pulang: number;
+  [key: string]: number;
+}
+
+export interface WakaTrend {
+  label: string;
+  hadir: number;
+  izin: number;
+  alpha: number;
+  sakit: number;
+  terlambat: number;
+}
+
+export interface WakaSummary {
+  statistik: WakaStatistik;
+  trend: WakaTrend[];
+}
+
+export interface ManualAttendanceRequest {
+  attendee_type: 'student' | 'teacher';
+  student_id?: string;
+  teacher_id?: string;
+  schedule_id: string;
+  status: 'present' | 'late' | 'excused' | 'sick' | 'absent' | 'dinas' | 'izin' | 'pulang';
+  date: string;
+  reason?: string;
+}
+
+export interface QRCodeData {
+  schedule_id: number;
+  type: 'student' | 'teacher';
+  expires_in_minutes?: number;
 }

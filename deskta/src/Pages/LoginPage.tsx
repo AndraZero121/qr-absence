@@ -61,30 +61,32 @@ export default function LoginPage({ role, onLogin, onBack }: LoginPageProps) {
         password: isStudentRole ? '' : form.password.trim(), // Empty password for students (NISN login)
       });
 
+      // Get precise role from API response (already standardized in backend)
+      const actualRole = response.user.role || (response.user as any).user_type;
+
       // Login successful - call onLogin with user data
-      if (role) {
-        // Store user data in localStorage
-        localStorage.setItem('userRole', role);
-        localStorage.setItem('userName', response.user.name);
-        localStorage.setItem('userPhone', response.user.phone || '');
+      if (actualRole) {
+        // Store user data in localStorage using standardized keys
+        localStorage.setItem('user_role', actualRole);
+        localStorage.setItem('user_data', JSON.stringify(response.user));
 
         // Call onLogin callback
-        onLogin(role, response.user.name, response.user.phone || '');
+        onLogin(actualRole, response.user.name, response.user.phone || '');
 
-        // Navigate to appropriate dashboard based on role
+        // Navigate to appropriate dashboard based on ACTUAL role
         const dashboardRoutes: Record<string, string> = {
           'admin': '/admin/dashboard',
           'waka': '/waka/dashboard',
           'guru': '/guru/dashboard',
           'wakel': '/walikelas/dashboard',
           'siswa': '/siswa/dashboard',
-          'pengurus_kelas': '/pengurus-kelas/dashboard',
+          'pengurus_kelas': '/pengurus_kelas/dashboard',
         };
 
-        const dashboardPath = dashboardRoutes[role] || '/';
+        const dashboardPath = dashboardRoutes[actualRole] || '/';
         navigate(dashboardPath, { replace: true });
       } else {
-        setError("Halaman tidak ditemukan");
+        setError("Role tidak valid dikembalikan oleh server");
       }
     } catch (err) {
       // Handle login error
@@ -106,7 +108,7 @@ export default function LoginPage({ role, onLogin, onBack }: LoginPageProps) {
         return "Kode Guru";
       case "siswa":
       case "pengurus_kelas":
-        return "NISN";
+        return "NIS / NISN";
       default:
         return "Identitas";
     }
@@ -122,7 +124,7 @@ export default function LoginPage({ role, onLogin, onBack }: LoginPageProps) {
         return "Masukkan kode guru";
       case "siswa":
       case "pengurus_kelas":
-        return "Masukkan NISN";
+        return "Masukkan NIS atau NISN";
       default:
         return "Masukkan identitas";
     }
@@ -352,6 +354,20 @@ export default function LoginPage({ role, onLogin, onBack }: LoginPageProps) {
                   disabled={isLoading || !role}
                   aria-label={getIdentifierLabel()}
                 />
+                {/* Info for NISN Login */}
+                {(role === 'siswa' || role === 'pengurus_kelas') && (
+                  <div style={{
+                    marginTop: 8,
+                    padding: '8px 12px',
+                    backgroundColor: '#DBEAFE',
+                    border: '1px solid #93C5FD',
+                    borderRadius: 6,
+                    fontSize: 12,
+                    color: '#1E40AF',
+                  }}>
+                    💡 Masukkan NISN saja untuk login cepat (tanpa password)
+                  </div>
+                )}
               </div>
 
               {/* PASSWORD - Hidden for siswa and pengurus_kelas */}

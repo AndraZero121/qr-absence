@@ -42,18 +42,21 @@ export default function App() {
       try {
         // Validate token by fetching user data
         const user = await authService.getMe();
+        const role = user.role || user.user_type || '';
         const userData = {
-          role: user.role,
+          role: role,
           name: user.name,
           phone: user.phone || '',
         };
         setCurrentUser(userData);
-        localStorage.setItem("currentUser", JSON.stringify(userData));
+        localStorage.setItem("user_role", role);
+        localStorage.setItem("user_data", JSON.stringify(user));
       } catch (error) {
         console.error("Token validation failed:", error);
         // Clear invalid token
         authService.removeToken();
-        localStorage.removeItem("currentUser");
+        localStorage.removeItem("user_role");
+        localStorage.removeItem("user_data");
         localStorage.removeItem("selectedRole");
       } finally {
         setIsLoading(false);
@@ -71,8 +74,7 @@ export default function App() {
   const handleLogin = useCallback((role: string, name: string, phone: string) => {
     const userData = { role, name, phone };
     setCurrentUser(userData);
-    localStorage.setItem("currentUser", JSON.stringify(userData));
-    sessionStorage.setItem("currentUser", JSON.stringify(userData));
+    localStorage.setItem("user_role", role);
     localStorage.setItem("selectedRole", role);
     setSelectedRole(null);
   }, []);
@@ -80,6 +82,9 @@ export default function App() {
   const handleLogout = useCallback(async () => {
     const { authService } = await import('./services/auth');
     await authService.logout();
+    localStorage.removeItem("user_role");
+    localStorage.removeItem("user_data");
+    localStorage.removeItem("selectedRole");
     setCurrentUser(null);
     setSelectedRole(null);
   }, []);

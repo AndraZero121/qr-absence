@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import attendanceService from '../../services/attendance';
 import apiClient from '../../services/api';
-import './RiwayatKelas.css';
 import PageWrapper from '../../components/ui/PageWrapper';
 
 const RiwayatKelas = () => {

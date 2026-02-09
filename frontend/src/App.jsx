@@ -2,13 +2,64 @@ import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { AnimatePresence } from 'framer-motion';
 import Layout from './components/layout/Layout';
 
-// Navbars
-import NavbarAdmin from './components/Admin/NavbarAdmin';
-import NavbarGuru from './components/Guru/NavbarGuru';
-import NavbarSiswa from './components/Siswa/NavbarSiswa';
-import NavbarPengurus from './components/PengurusKelas/NavbarPengurus';
-import NavbarWakel from './components/WaliKelas/NavbarWakel';
-import NavbarWaka from './components/Waka/NavbarWaka';
+import { 
+  FaHome, 
+  FaUserGraduate, 
+  FaChalkboardTeacher, 
+  FaSchool, 
+  FaBook, 
+  FaCalendarAlt, 
+  FaClipboardList, 
+  FaFileAlt, 
+  FaHistory,
+  FaShieldAlt,
+  FaUserShield,
+  FaUsers
+} from 'react-icons/fa';
+
+// Pages
+const adminLinks = [
+  { to: "/admin/dashboard", label: "Beranda", icon: <FaHome /> },
+  { to: "/admin/siswa", label: "Data Siswa", icon: <FaUserGraduate /> },
+  { to: "/admin/guru", label: "Data Guru", icon: <FaChalkboardTeacher /> },
+  { to: "/admin/jadwal-guru", label: "Jadwal Guru", icon: <FaCalendarAlt /> },
+  { to: "/admin/jadwal-siswa", label: "Jadwal Siswa", icon: <FaCalendarAlt /> },
+  { to: "/admin/kelas", label: "Data Kelas", icon: <FaSchool /> },
+  { to: "/admin/jurusan", label: "Data Konsentrasi Keahlian", icon: <FaBook /> },
+];
+
+const guruLinks = [
+  { to: "/guru/dashboard", label: "Beranda", icon: <FaHome /> },
+  { to: "/guru/jadwal", label: "Jadwal", icon: <FaCalendarAlt /> },
+  { to: "/guru/presensi", label: "Kehadiran Siswa", icon: <FaClipboardList /> },
+  { to: "/guru/izin", label: "Lapor Izin Mengajar", icon: <FaFileAlt /> },
+];
+
+const siswaLinks = [
+  { to: "/siswa/dashboard", label: "Beranda", icon: <FaHome /> },
+  { to: "/siswa/riwayat", label: "Riwayat Kehadiran", icon: <FaHistory /> },
+];
+
+const pengurusLinks = [
+  { to: "/pengurus-kelas/dashboard", label: "Beranda", icon: <FaHome /> },
+  { to: "/pengurus-kelas/riwayat", label: "Riwayat Kehadiran", icon: <FaHistory /> },
+  { to: "/pengurus-kelas/presensi", label: "Presensi", icon: <FaClipboardList /> },
+];
+
+const wakelLinks = [
+  { to: "/walikelas/dashboard", label: "Beranda", icon: <FaHome /> },
+  { to: "/walikelas/datasiswa", label: "Data Siswa", icon: <FaUsers /> },
+  { to: "/walikelas/riwayatkehadiran", label: "Riwayat Kehadiran", icon: <FaHistory /> },
+  { to: "/walikelas/jadwalwakel", label: "Jadwal", icon: <FaCalendarAlt /> },
+];
+
+const wakaLinks = [
+  { to: "/waka/dashboard", label: "Dashboard", icon: <FaHome /> },
+  { to: "/waka/jadwal-guru", label: "Jadwal Guru", icon: <FaChalkboardTeacher /> },
+  { to: "/waka/jadwal-siswa", label: "Jadwal Siswa", icon: <FaUserGraduate /> },
+  { to: "/waka/kehadiran-siswa", label: "Presensi Siswa", icon: <FaClipboardList /> },
+  { to: "/waka/kehadiran-guru", label: "Presensi Guru", icon: <FaUserShield /> },
+];
 
 // Pages
 import LandingPage from './pages/Auth/LandingPage';
@@ -67,36 +118,42 @@ function App() {
       <Route path="/login" element={<Navigate to="/" replace />} />
 
       {/* Admin Routes */}
-      <Route element={<Layout NavbarComponent={NavbarAdmin} />}>
+      <Route element={<Layout links={adminLinks} />}>
         <Route path="/admin/dashboard" element={<Dashboard />} />
         <Route path="/admin/siswa" element={<DataSiswa />} />
         <Route path="/admin/guru" element={<DataGuru />} />
+        <Route path="/admin/jadwal-guru" element={<JadwalGuruIndex />} />
+        <Route path="/admin/jadwal-guru/:id" element={<JadwalGuruShow />} />
+        <Route path="/admin/jadwal-guru/:id/edit" element={<JadwalGuruEdit />} />
+        <Route path="/admin/jadwal-siswa" element={<JadwalSiswaIndex />} />
+        <Route path="/admin/jadwal-siswa/:id" element={<JadwalSiswaShow />} />
+        <Route path="/admin/jadwal-siswa/:id/edit" element={<JadwalSiswaEdit />} />
         <Route path="/admin/kelas" element={<DataKelas />} />
         <Route path="/admin/jurusan" element={<DataJurusan />} />
       </Route>
 
       {/* Guru Routes */}
-      <Route element={<Layout NavbarComponent={NavbarGuru} />}>
+      <Route element={<Layout links={guruLinks} />}>
         <Route path="/guru/dashboard" element={<DashboardGuru />} />
         <Route path="/guru/jadwal" element={<Jadwal />} />
         <Route path="/guru/presensi" element={<PresensiSiswa />} />
       </Route>
 
       {/* Siswa Routes */}
-      <Route element={<Layout NavbarComponent={NavbarSiswa} />}>
+      <Route element={<Layout links={siswaLinks} />}>
         <Route path="/siswa/dashboard" element={<DashboardSiswa />} />
         <Route path="/siswa/riwayat" element={<Riwayat />} />
       </Route>
       
       {/* Pengurus Kelas Routes */}
-      <Route element={<Layout NavbarComponent={NavbarPengurus} />}>
+      <Route element={<Layout links={pengurusLinks} />}>
         <Route path="/pengurus-kelas/dashboard" element={<DashboardKelas />} />
         <Route path="/pengurus-kelas/riwayat" element={<RiwayatKelas />} />
         <Route path="/pengurus-kelas/presensi" element={<PresensiKelas />} />
       </Route>
 
       {/* Wali Kelas Routes */}
-      <Route element={<Layout NavbarComponent={NavbarWakel} />}>
+      <Route element={<Layout links={wakelLinks} />}>
         <Route path="/walikelas/dashboard" element={<DashboardWakel />} />
         <Route path="/walikelas/datasiswa" element={<Data />} />
         <Route path="/walikelas/riwayatkehadiran" element={<RiwayatKehadiran />} />
@@ -105,7 +162,7 @@ function App() {
       </Route>
 
       {/* Waka Routes */}
-      <Route element={<Layout NavbarComponent={NavbarWaka} />}>
+      <Route element={<Layout links={wakaLinks} />}>
         <Route path="/waka/dashboard" element={<DashboardWaka />} />
         <Route path="/waka/jadwal-guru" element={<JadwalGuruIndex />} />
         <Route path="/waka/jadwal-guru/:id" element={<JadwalGuruShow />} />

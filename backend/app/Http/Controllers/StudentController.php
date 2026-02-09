@@ -23,21 +23,21 @@ class StudentController extends Controller
             $search = $request->string('search');
             $query->where(function ($q) use ($search) {
                 $q->where('nisn', 'like', "%{$search}%")
-                  ->orWhere('nis', 'like', "%{$search}%")
-                  ->orWhereHas('user', function ($u) use ($search) {
-                      $u->where('name', 'like', "%{$search}%")
-                        ->orWhere('username', 'like', "%{$search}%");
-                  });
+                    ->orWhere('nis', 'like', "%{$search}%")
+                    ->orWhereHas('user', function ($u) use ($search) {
+                        $u->where('name', 'like', "%{$search}%")
+                            ->orWhere('username', 'like', "%{$search}%");
+                    });
             });
         }
 
         $perPage = $request->integer('per_page', 15);
-        
+
         if ($perPage === -1) {
-            return response()->json($query->latest()->get());
+            return response()->json(\App\Http\Resources\StudentResource::collection($query->latest()->get()));
         }
 
-        return response()->json($query->latest()->paginate($perPage)->appends($request->all()));
+        return \App\Http\Resources\StudentResource::collection($query->latest()->paginate($perPage)->appends($request->all()))->response();
     }
 
     public function import(Request $request): JsonResponse
@@ -47,7 +47,7 @@ class StudentController extends Controller
             'items' => ['required', 'array', 'min:1'],
             'items.*.name' => ['required', 'string', 'max:255'],
             'items.*.username' => ['required', 'string', 'max:50', 'distinct', 'unique:users,username'],
-            'items.*.email' => ['nullable', 'email'],
+            'items.*.email' => ['nullable', 'email', 'distinct', 'unique:users,email'],
             'items.*.password' => ['nullable', 'string', 'min:6'],
             'items.*.nisn' => ['required', 'string', 'distinct', 'unique:student_profiles,nisn'],
             'items.*.nis' => ['required', 'string', 'distinct', 'unique:student_profiles,nis'],
@@ -59,9 +59,9 @@ class StudentController extends Controller
             'items.*.contact' => ['nullable', 'string', 'max:50'],
         ]);
 
-        $created = collect();
+        $count = 0;
 
-        DB::transaction(function () use ($created, $dto): void {
+        DB::transaction(function () use ($dto, &$count): void {
             foreach ($dto->items as $item) {
                 $user = User::create([
                     'name' => $item['name'],
@@ -73,41 +73,27 @@ class StudentController extends Controller
                     'user_type' => 'student',
                 ]);
 
-                $created->push($user->studentProfile()->create([
+                $user->studentProfile()->create([
                     'nisn' => $item['nisn'],
                     'nis' => $item['nis'],
                     'gender' => $item['gender'],
                     'address' => $item['address'],
                     'class_id' => $item['class_id'],
                     'is_class_officer' => $item['is_class_officer'] ?? false,
-                ]));
+                ]);
+                $count++;
             }
         });
 
-        $students = new \Illuminate\Database\Eloquent\Collection($created);
-
         return response()->json([
-            'created' => $students->count(),
-            'students' => $students->load(['user', 'classRoom']),
+            'created' => $count,
+            'message' => "Successfully imported {$count} students.",
         ], 201);
     }
 
-    public function store(Request $request): JsonResponse
+    public function store(\App\Http\Requests\StoreStudentRequest $request): JsonResponse
     {
-        $data = $request->validate([
-            'name' => ['required', 'string', 'max:255'],
-            'username' => ['required', 'string', 'max:50', 'unique:users,username'],
-            'email' => ['nullable', 'email'],
-            'password' => ['required', 'string', 'min:6'],
-            'nisn' => ['required', 'string', 'unique:student_profiles,nisn'],
-            'nis' => ['required', 'string', 'unique:student_profiles,nis'],
-            'gender' => ['required', 'in:L,P'],
-            'address' => ['required', 'string'],
-            'class_id' => ['required', 'exists:classes,id'],
-            'is_class_officer' => ['nullable', 'boolean'],
-            'phone' => ['nullable', 'string', 'max:30'],
-            'contact' => ['nullable', 'string', 'max:50'],
-        ]);
+        $data = $request->validated();
 
         $student = DB::transaction(function () use ($data) {
             $user = User::create([
@@ -127,30 +113,21 @@ class StudentController extends Controller
                 'address' => $data['address'],
                 'class_id' => $data['class_id'],
                 'is_class_officer' => $data['is_class_officer'] ?? false,
+                'parent_phone' => $data['parent_phone'] ?? null,
             ]);
         });
 
-        return response()->json($student->load(['user', 'classRoom']), 201);
+        return response()->json(new \App\Http\Resources\StudentResource($student->load(['user', 'classRoom'])), 201);
     }
 
     public function show(StudentProfile $student): JsonResponse
     {
-        return response()->json($student->load(['user', 'classRoom', 'attendances']));
+        return response()->json(new \App\Http\Resources\StudentResource($student->load(['user', 'classRoom', 'attendances'])));
     }
 
-    public function update(Request $request, StudentProfile $student): JsonResponse
+    public function update(\App\Http\Requests\UpdateStudentRequest $request, StudentProfile $student): JsonResponse
     {
-        $data = $request->validate([
-            'name' => ['sometimes', 'string', 'max:255'],
-            'email' => ['nullable', 'email'],
-            'password' => ['nullable', 'string', 'min:6'],
-            'gender' => ['sometimes', 'in:L,P'],
-            'address' => ['sometimes', 'string'],
-            'class_id' => ['sometimes', 'exists:classes,id'],
-            'is_class_officer' => ['nullable', 'boolean'],
-            'phone' => ['nullable', 'string', 'max:30'],
-            'contact' => ['nullable', 'string', 'max:50'],
-        ]);
+        $data = $request->validated();
 
         DB::transaction(function () use ($data, $student): void {
             if (isset($data['name']) || isset($data['email']) || isset($data['password']) || isset($data['phone']) || isset($data['contact'])) {
@@ -168,10 +145,11 @@ class StudentController extends Controller
                 'address' => $data['address'] ?? $student->address,
                 'class_id' => $data['class_id'] ?? $student->class_id,
                 'is_class_officer' => $data['is_class_officer'] ?? $student->is_class_officer,
+                'parent_phone' => $data['parent_phone'] ?? $student->parent_phone,
             ]);
         });
 
-        return response()->json($student->fresh()->load(['user', 'classRoom']));
+        return response()->json(new \App\Http\Resources\StudentResource($student->fresh()->load(['user', 'classRoom'])));
     }
 
     public function destroy(StudentProfile $student): JsonResponse

@@ -6,7 +6,7 @@ import { Select } from '../../component/Shared/Select';
 import { Table } from '../../component/Shared/Table';
 import { TambahGuruForm } from '../../component/Shared/Form/TambahGuruForm';
 import {
-  MoreVertical, Edit, Trash2, Eye, Grid, FileDown, Upload, FileText, Download, Search, X
+  MoreVertical, Edit, Trash2, Eye, FileDown, FileText, Download, Search
 } from 'lucide-react';
 import { saveAs } from "file-saver";
 import { usePopup } from "../../component/Shared/Popup/PopupProvider";
@@ -127,7 +127,7 @@ export default function GuruAdmin({
 
   // ==================== FILTER OPTIONS ====================
   const keteranganOptions = Array.from(new Set(guruList.map((g) => g.keterangan)))
-    .filter(Boolean)
+    .filter((k): k is string => !!k)
     .sort()
     .map((m) => ({ value: m, label: m }));
 
@@ -247,9 +247,7 @@ export default function GuruAdmin({
     }
   };
 
-  const handleImport = () => {
-    fileInputRef.current?.click();
-  };
+
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     // Import implementation similar to previous but simplified for brevity

@@ -255,6 +255,19 @@ export default function DetailGuru({
     }
   };
 
+  const handleCancelEdit = () => {
+    if (confirm('Batal edit? Perubahan tidak akan disimpan.')) {
+      setIsEditMode(false);
+      setGuruData(originalData);
+      setFormErrors({});
+      // Reset temps if needed
+      if (originalData) {
+        if (originalData.role === 'Guru') setTempMataPelajaran(originalData.keterangan);
+        else if (originalData.role === 'Staff') setTempStaffBagian(originalData.keterangan);
+      }
+    }
+  };
+
   const handleBack = () => {
     if (isEditMode) {
       if (confirm('Batal edit? Perubahan tidak akan disimpan.')) {

@@ -3,15 +3,14 @@
 use App\Models\Attendance;
 use App\Models\Schedule;
 use App\Models\User;
-use App\Models\Classes;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 
 uses(RefreshDatabase::class);
 
 it('allows waka to record manual attendance', function () {
-    $waka = User::factory()->waka()->create(); 
+    $waka = User::factory()->waka()->create();
     $waka->refresh();
-    
+
     $student = User::factory()->student()->create();
     $student->refresh();
     $schedule = Schedule::factory()->create();
@@ -56,9 +55,9 @@ it('allows teacher to record manual attendance for their schedule', function () 
     $teacher->refresh();
     $student = User::factory()->student()->create();
     $student->refresh();
-    
+
     $schedule = Schedule::factory()->create([
-        'teacher_id' => $teacher->teacherProfile->id
+        'teacher_id' => $teacher->teacherProfile->id,
     ]);
 
     $response = $this->actingAs($teacher)
@@ -82,11 +81,11 @@ it('normalizes status in markExcuse', function () {
     $teacher->refresh();
     $student = User::factory()->student()->create();
     $student->refresh();
-    
+
     $schedule = Schedule::factory()->create([
-        'teacher_id' => $teacher->teacherProfile->id
+        'teacher_id' => $teacher->teacherProfile->id,
     ]);
-    
+
     $attendance = Attendance::create([
         'attendee_type' => 'student',
         'student_id' => $student->studentProfile->id,
@@ -107,4 +106,57 @@ it('normalizes status in markExcuse', function () {
         'status' => 'excused',
         'reason' => 'Sakit perut',
     ]);
+});
+
+it('prevents student from accessing another student document', function () {
+    $student1 = User::factory()->student()->create();
+    $student2 = User::factory()->student()->create();
+
+    $schedule = Schedule::factory()->create();
+    $attendance = Attendance::create([
+        'attendee_type' => 'student',
+        'student_id' => $student2->studentProfile->id,
+        'schedule_id' => $schedule->id,
+        'status' => 'present',
+        'date' => now(),
+    ]);
+
+    $attendance->attachments()->create([
+        'path' => 'test.pdf',
+        'original_name' => 'test.pdf',
+        'mime_type' => 'application/pdf',
+        'size' => 100,
+    ]);
+
+    $response = $this->actingAs($student1)
+        ->getJson("/api/attendance/{$attendance->id}/document");
+
+    $response->assertForbidden();
+});
+
+it('allows student to access their own document', function () {
+    $student = User::factory()->student()->create();
+    $student->load('studentProfile');
+
+    $schedule = Schedule::factory()->create();
+    $attendance = Attendance::create([
+        'attendee_type' => 'student',
+        'student_id' => $student->studentProfile->id,
+        'schedule_id' => $schedule->id,
+        'status' => 'present',
+        'date' => now(),
+    ]);
+
+    $attendance->attachments()->create([
+        'path' => 'test.pdf',
+        'original_name' => 'test.pdf',
+        'mime_type' => 'application/pdf',
+        'size' => 100,
+    ]);
+
+    $response = $this->withoutExceptionHandling()
+        ->actingAs($student)
+        ->getJson("/api/attendance/{$attendance->id}/document");
+
+    $response->assertSuccessful();
 });

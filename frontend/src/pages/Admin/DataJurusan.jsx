@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { 
   FaShapes, 
   FaPlus, 
@@ -8,7 +8,7 @@ import {
   FaArrowLeft
 } from 'react-icons/fa';
 import TambahJurusan from '../../components/Admin/TambahJurusan';
-import CustomAlert from '../../components/Common/CustomAlert';
+import Link from '../../components/Common/CustomAlert';
 import PageWrapper from '../../components/ui/PageWrapper';
 
 function DataJurusan() {
@@ -20,7 +20,6 @@ function DataJurusan() {
     { id: 3, kodeJurusan: 'DKV', namaJurusan: 'Desain Komunikasi Visual' },
   ]);
   const [editData, setEditData] = useState(null);
-  const [alertState, setAlertState] = useState({ show: false, type: 'confirm', title: '', message: '' });
 
   const handleAddJurusan = (formData) => {
     setJurusans([...jurusans, { ...formData, id: Date.now() }]);

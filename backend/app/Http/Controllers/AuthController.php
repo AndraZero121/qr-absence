@@ -49,11 +49,14 @@ class AuthController extends Controller
             ]);
         }
 
-        // For students with NISN login, skip password check
-        $isStudentNisnLogin = $user->user_type === 'student' &&
-                              (! isset($data['password']) || empty($data['password']));
+        // Check if this is a student trying to login with NISN/NIS only (no password)
+        $isStudentNisnLogin = $user->user_type === 'student' && 
+                               empty($data['password']) &&
+                               ($studentProfile = \App\Models\StudentProfile::where('nisn', $data['login'])
+                                   ->orWhere('nis', $data['login'])
+                                   ->first()) !== null;
 
-        // Check password only if not NISN login
+        // Check password for non-students OR students with password
         if (! $isStudentNisnLogin && ! Hash::check($data['password'] ?? '', $user->password)) {
             throw ValidationException::withMessages([
                 'login' => ['Invalid credentials'],
@@ -67,7 +70,7 @@ class AuthController extends Controller
         }
 
         if ($user->user_type === 'admin' && ! $user->adminProfile) {
-            $user->adminProfile()->create(['type' => 'waka']);
+            $user->adminProfile()->create(['type' => 'admin']);
         }
 
         $token = $user->createToken('api')->plainTextToken;
@@ -75,12 +78,25 @@ class AuthController extends Controller
         Log::info('auth.login.success', [
             'user_id' => $user->id,
             'user_type' => $user->user_type,
-            'login_method' => $isStudentNisnLogin ? 'nisn' : 'password',
         ]);
+
+        // Determine precise role for frontend compatibility
+        $role = $user->user_type;
+        if ($user->user_type === 'admin') {
+            $role = $user->adminProfile?->type ?? 'admin';
+        } elseif ($user->user_type === 'teacher') {
+            $role = $user->teacherProfile?->homeroom_class_id ? 'wakel' : 'guru';
+        } elseif ($user->user_type === 'student') {
+            $role = $user->studentProfile?->is_class_officer ? 'pengurus_kelas' : 'siswa';
+        }
+
+        $userData = $user->load(['adminProfile', 'teacherProfile', 'studentProfile'])->toArray();
+        $userData['role'] = $role;
+        $userData['user_type'] = $user->user_type; // Keep original for reference
 
         return response()->json([
             'token' => $token,
-            'user' => $user->load(['adminProfile', 'teacherProfile', 'studentProfile']),
+            'user' => $userData,
         ]);
     }
 

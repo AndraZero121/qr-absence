@@ -16,11 +16,12 @@ class TeacherController extends Controller
     public function index(Request $request): JsonResponse
     {
         $query = TeacherProfile::query()->with(['user', 'homeroomClass']);
-        
+
         $perPage = $request->integer('per_page', 15);
-        
+
         if ($perPage === -1) {
             $teachers = $query->latest()->get();
+
             return TeacherResource::collection($teachers)->response();
         }
 
@@ -36,7 +37,7 @@ class TeacherController extends Controller
             'items' => ['required', 'array', 'min:1'],
             'items.*.name' => ['required', 'string', 'max:255'],
             'items.*.username' => ['required', 'string', 'max:50', 'distinct', 'unique:users,username'],
-            'items.*.email' => ['nullable', 'email'],
+            'items.*.email' => ['nullable', 'email', 'distinct', 'unique:users,email'],
             'items.*.password' => ['nullable', 'string', 'min:6'],
             'items.*.nip' => ['required', 'string', 'distinct', 'unique:teacher_profiles,nip'],
             'items.*.phone' => ['nullable', 'string', 'max:30'],
@@ -45,9 +46,9 @@ class TeacherController extends Controller
             'items.*.subject' => ['nullable', 'string', 'max:100'],
         ]);
 
-        $created = collect();
+        $count = 0;
 
-        DB::transaction(function () use ($created, $dto): void {
+        DB::transaction(function () use ($dto, &$count): void {
             foreach ($dto->items as $item) {
                 $user = User::create([
                     'name' => $item['name'],
@@ -59,35 +60,24 @@ class TeacherController extends Controller
                     'user_type' => 'teacher',
                 ]);
 
-                $created->push($user->teacherProfile()->create([
+                $user->teacherProfile()->create([
                     'nip' => $item['nip'],
                     'homeroom_class_id' => $item['homeroom_class_id'] ?? null,
                     'subject' => $item['subject'] ?? null,
-                ]));
+                ]);
+                $count++;
             }
         });
 
-        $teachers = new \Illuminate\Database\Eloquent\Collection($created);
-
         return response()->json([
-            'created' => $teachers->count(),
-            'teachers' => $teachers->load(['user', 'homeroomClass']),
+            'created' => $count,
+            'message' => "Successfully imported {$count} teachers.",
         ], 201);
     }
 
-    public function store(Request $request): JsonResponse
+    public function store(\App\Http\Requests\StoreTeacherRequest $request): JsonResponse
     {
-        $data = $request->validate([
-            'name' => ['required', 'string', 'max:255'],
-            'username' => ['required', 'string', 'max:50', 'unique:users,username'],
-            'email' => ['nullable', 'email'],
-            'password' => ['required', 'string', 'min:6'],
-            'nip' => ['required', 'string', 'unique:teacher_profiles,nip'],
-            'phone' => ['nullable', 'string', 'max:30'],
-            'contact' => ['nullable', 'string', 'max:50'],
-            'homeroom_class_id' => ['nullable', 'exists:classes,id'],
-            'subject' => ['nullable', 'string', 'max:100'],
-        ]);
+        $data = $request->validated();
 
         $teacher = DB::transaction(function () use ($data) {
             $user = User::create([
@@ -115,17 +105,9 @@ class TeacherController extends Controller
         return response()->json($teacher->load(['user', 'homeroomClass', 'schedules']));
     }
 
-    public function update(Request $request, TeacherProfile $teacher): JsonResponse
+    public function update(\App\Http\Requests\UpdateTeacherRequest $request, TeacherProfile $teacher): JsonResponse
     {
-        $data = $request->validate([
-            'name' => ['sometimes', 'string', 'max:255'],
-            'email' => ['nullable', 'email'],
-            'password' => ['nullable', 'string', 'min:6'],
-            'phone' => ['nullable', 'string', 'max:30'],
-            'contact' => ['nullable', 'string', 'max:50'],
-            'homeroom_class_id' => ['nullable', 'exists:classes,id'],
-            'subject' => ['nullable', 'string', 'max:100'],
-        ]);
+        $data = $request->validated();
 
         DB::transaction(function () use ($data, $teacher): void {
             if (isset($data['name']) || isset($data['email']) || isset($data['password']) || isset($data['phone']) || isset($data['contact'])) {
@@ -141,6 +123,7 @@ class TeacherController extends Controller
             $teacher->update([
                 'homeroom_class_id' => $data['homeroom_class_id'] ?? $teacher->homeroom_class_id,
                 'subject' => $data['subject'] ?? $teacher->subject,
+                'nip' => $data['nip'] ?? $teacher->nip,
             ]);
         });
 
@@ -342,13 +325,20 @@ class TeacherController extends Controller
             })->orWhere('nis', 'like', "%{$search}%");
         }
 
-        $students = $query->get()->map(function ($student) {
-            // Get attendance summary for this student
-            $attendanceSummary = \App\Models\Attendance::where('student_id', $student->id)
-                ->selectRaw('status, count(*) as count')
-                ->groupBy('status')
-                ->get()
-                ->pluck('count', 'status');
+        $studentsData = $query->get();
+        $studentIds = $studentsData->pluck('id');
+
+        // Fetch attendance summaries for all students in one query to avoid N+1
+        $attendanceSummaries = \App\Models\Attendance::whereIn('student_id', $studentIds)
+            ->selectRaw('student_id, status, count(*) as count')
+            ->groupBy('student_id', 'status')
+            ->get()
+            ->groupBy('student_id');
+
+        $students = $studentsData->map(function ($student) use ($attendanceSummaries) {
+            // Get attendance summary for this student from the pre-fetched collection
+            $summaryRows = $attendanceSummaries->get($student->id, collect());
+            $attendanceSummary = $summaryRows->pluck('count', 'status');
 
             $absent = $attendanceSummary->get('absent', 0);
             $excused = $attendanceSummary->get('excused', 0) + $attendanceSummary->get('izin', 0);
@@ -406,8 +396,8 @@ class TeacherController extends Controller
         $user = $request->user();
         $teacher = $user->teacherProfile;
 
-        if (!$teacher) {
-             return response()->json(['message' => 'Teacher profile not found'], 404);
+        if (! $teacher) {
+            return response()->json(['message' => 'Teacher profile not found'], 404);
         }
 
         $absenceRequest = \App\Models\AbsenceRequest::create([
@@ -423,15 +413,15 @@ class TeacherController extends Controller
         // Upload attachment if exists
         if ($request->hasFile('attachment')) {
             $path = $request->file('attachment')->store('absence-requests');
-             // Assuming AbsenceRequest has polymorphic attachments or a simple column?
-             // Checking migration... no 'attachment_path' in recent migration? 
-             // 2025_12_30_000005_create_absence_requests_table.php might have it.
-             // If not, we can rely on Attendance attachment later or add it.
-             // For now, let's skip saving path if column not exists, or verify migration.
-             // Re-checking migration list: 2026_02_08_104655_add_teacher_id_to_absence_requests.php
-             // I'll assume standard Attachment model or basic field. 
-             // If simple string, let's assume 'attachment_path'.
-             // I will comment this out for now to be safe until migration verified.
+            // Assuming AbsenceRequest has polymorphic attachments or a simple column?
+            // Checking migration... no 'attachment_path' in recent migration?
+            // 2025_12_30_000005_create_absence_requests_table.php might have it.
+            // If not, we can rely on Attendance attachment later or add it.
+            // For now, let's skip saving path if column not exists, or verify migration.
+            // Re-checking migration list: 2026_02_08_104655_add_teacher_id_to_absence_requests.php
+            // I'll assume standard Attachment model or basic field.
+            // If simple string, let's assume 'attachment_path'.
+            // I will comment this out for now to be safe until migration verified.
         }
 
         return response()->json($absenceRequest, 201);

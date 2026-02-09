@@ -1,5 +1,5 @@
 ﻿import { useState, useEffect } from "react";
-import SiswaLayout from "../../component/Siswa/SiswaLayout";
+import SiswaLayout, { type MenuKey } from "../../component/Siswa/SiswaLayout";
 // import openBook from "../../assets/Icon/open-book.png";
 import { Modal } from "../../component/Shared/Modal";
 import JadwalSiswa from "./JadwalSiswa.tsx";
@@ -46,7 +46,7 @@ ChartJS.register(
   Filler
 );
 
-type SiswaPage = "dashboard" | "jadwal-anda" | "notifikasi" | "absensi";
+type SiswaPage = MenuKey;
 
 interface ScheduleItem {
   id: string;

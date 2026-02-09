@@ -90,13 +90,13 @@ export default function JadwalSiswaIndex() {
 
                 <div className="grid grid-cols-2 gap-3">
                     <button
-                        onClick={() => navigate(`/waka/jadwal-siswa/${item.id}`)}
+                        onClick={() => navigate(`${window.location.pathname}/${item.id}`)}
                         className="flex-1 bg-gray-900 text-white py-4 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all hover:bg-black active:scale-95 flex items-center justify-center gap-2"
                     >
                         <FaEye /> LIHAT
                     </button>
                     <button
-                        onClick={() => navigate(`/waka/jadwal-siswa/${item.id}/edit`)}
+                        onClick={() => navigate(`${window.location.pathname}/${item.id}/edit`)}
                         className="flex-1 bg-blue-50 text-blue-700 border border-blue-100 py-4 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all hover:bg-blue-100 active:scale-95 flex items-center justify-center gap-2"
                     >
                         <FaEdit /> ATUR ULANG

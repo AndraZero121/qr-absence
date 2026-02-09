@@ -31,9 +31,10 @@ export const authService = {
         } finally {
             // Always clear local data even if API call fails
             this.removeToken();
-            localStorage.removeItem('currentUser');
+            localStorage.removeItem('user_role');
+            localStorage.removeItem('user_data');
             localStorage.removeItem('selectedRole');
-            sessionStorage.removeItem('currentUser');
+            sessionStorage.clear();
         }
     },
 

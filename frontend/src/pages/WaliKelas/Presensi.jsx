@@ -62,7 +62,7 @@ const Presensi = () => {
           };
         });
         setSiswaList(mapped);
-      } catch (error) { showAlert('error', 'Gagal', 'Gagal memuat data siswa'); } finally { setIsLoading(false); }
+      } catch { showAlert('error', 'Gagal', 'Gagal memuat data siswa'); } finally { setIsLoading(false); }
     };
     fetchData();
   }, [scheduleId, classId]);
@@ -105,7 +105,7 @@ const Presensi = () => {
       await Promise.all(promises);
       showAlert('success', 'Berhasil', 'Presensi berhasil disimpan');
       setTimeout(() => navigate('/walikelas/dashboard'), 1500);
-    } catch (error) { showAlert('error', 'Gagal', 'Terjadi kesalahan saat menyimpan data'); } finally { setIsLoading(false); }
+    } catch { showAlert('error', 'Gagal', 'Terjadi kesalahan saat menyimpan data'); } finally { setIsLoading(false); }
   };
 
   if (!scheduleId) {
@@ -179,7 +179,9 @@ const Presensi = () => {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
-              {siswaList.map((s, i) => (
+              {isLoading ? (
+                <tr><td colSpan="5" className="text-center py-20"><FaSpinner className="animate-spin text-indigo-600 text-3xl mx-auto" /></td></tr>
+              ) : siswaList.map((s, i) => (
                 <tr key={s.id} className={`hover:bg-blue-50/30 transition-all duration-300 group ${s.status ? 'bg-indigo-50/10' : ''}`}>
                   <td className="px-10 py-6 text-sm font-black text-gray-300 text-center group-hover:text-indigo-400">{i + 1}</td>
                   <td className="px-8 py-6">

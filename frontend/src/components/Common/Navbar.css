@@ -40,7 +40,7 @@
 
 .logo {
     height: 52px;
-    filter: drop-shadow(0 2px 8px rgba(0,0,0,0.3));
+    filter: drop-shadow(0 2px 8px rgba(0, 0, 0, 0.3));
 }
 
 .brand-text {
@@ -56,7 +56,7 @@
     font-weight: 900;
     letter-spacing: 1.5px;
     line-height: 1.1;
-    text-shadow: 0 2px 4px rgba(0,0,0,0.3);
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
 }
 
 .app-subtitle {
@@ -176,7 +176,6 @@
     border-radius: 12px;
     font-size: 1.4rem;
     cursor: pointer;
-    display: none;
     align-items: center;
     justify-content: center;
     transition: all 0.2s ease;
@@ -184,110 +183,6 @@
 
 .mobile-toggle:hover {
     background: rgba(255, 255, 255, 0.2);
-}
-
-/* Mobile Sidebar & Other Styles keep consistent */
-.mobile-sidebar {
-    position: fixed;
-    top: 0;
-    right: -100%;
-    width: 320px;
-    height: 100vh;
-    background: #001F3E;
-    z-index: 1001;
-    transition: right 0.5s cubic-bezier(0.16, 1, 0.3, 1);
-    display: flex;
-    flex-direction: column;
-    box-shadow: -15px 0 40px rgba(0,0,0,0.4);
-}
-
-.mobile-sidebar.active {
-    right: 0;
-}
-
-.mobile-profile {
-    padding: 50px 30px;
-    background: linear-gradient(to bottom, #003366, #001F3E);
-    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    text-align: center;
-    gap: 15px;
-}
-
-.mobile-avatar {
-    width: 80px;
-    height: 80px;
-    background: white;
-    border-radius: 24px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 36px;
-    color: #001F3E;
-    box-shadow: 0 10px 25px rgba(0,0,0,0.3);
-}
-
-.mobile-user-name {
-    color: white;
-    font-weight: 900;
-    font-size: 1.3rem;
-    letter-spacing: 0.5px;
-}
-
-.mobile-user-role {
-    color: #FFC107;
-    font-size: 0.85rem;
-    font-weight: 800;
-    text-transform: uppercase;
-    letter-spacing: 2px;
-}
-
-.mobile-links {
-    padding: 30px 20px;
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-}
-
-.mobile-links a {
-    color: rgba(255, 255, 255, 0.75);
-    text-decoration: none;
-    padding: 18px 25px;
-    border-radius: 16px;
-    font-weight: 700;
-    font-size: 1.1rem;
-    transition: all 0.2s ease;
-}
-
-.mobile-links a:hover, .mobile-links a.active {
-    background: rgba(255, 255, 255, 0.12);
-    color: white;
-    transform: translateX(5px);
-}
-
-.mobile-footer {
-    margin-top: auto;
-    padding: 40px 20px;
-}
-
-.btn-logout-mobile {
-    width: 100%;
-    padding: 18px;
-    background: linear-gradient(to right, #ff4b2b, #dc3545);
-    color: white;
-    border: none;
-    border-radius: 16px;
-    font-weight: 800;
-    text-transform: uppercase;
-    letter-spacing: 1px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 12px;
-    cursor: pointer;
-    box-shadow: 0 10px 20px rgba(220, 53, 69, 0.2);
 }
 
 .nav-overlay {
@@ -302,6 +197,7 @@
     .nav-container {
         padding: 0 30px;
     }
+
     .nav-right {
         gap: 30px;
     }
@@ -311,12 +207,15 @@
     .desktop-only {
         display: none;
     }
+
     .mobile-toggle {
         display: flex;
     }
+
     .nav-container {
         padding: 0 25px;
     }
+
     .school-name {
         font-size: 1.2rem;
     }
@@ -324,6 +223,7 @@
 
 @media (max-width: 480px) {
     .brand-text {
-        display: none; /* Only logo on very small screens */
+        display: none;
+        /* Only logo on very small screens */
     }
 }

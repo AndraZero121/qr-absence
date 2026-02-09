@@ -22,7 +22,7 @@ import { getMyAttendanceSummary } from '../../services/attendance';
 import { STATUS_COLORS_HEX } from '../../utils/statusMapping';
 
 // Subjects Modal Component
-const SubjectsModal = ({ isOpen, onClose, scheduleImage }) => {
+const SubjectsModal = ({ isOpen, onClose, schedules = [], isLoading }) => {
   if (!isOpen) return null;
 
   return (
@@ -32,23 +32,41 @@ const SubjectsModal = ({ isOpen, onClose, scheduleImage }) => {
           <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-xl transition-colors text-gray-400">
             <FaArrowLeft size={20} />
           </button>
-          <h2 className="text-xl font-black text-gray-800 tracking-tight">Jadwal Pembelajaran</h2>
+          <h2 className="text-xl font-black text-gray-800 tracking-tight">Jadwal Hari Ini</h2>
         </div>
 
-        <div className="p-6 overflow-y-auto max-h-[70vh] flex justify-center bg-gray-50/50">
-          {scheduleImage ? (
-            <img
-              src={scheduleImage}
-              alt="Jadwal Pembelajaran"
-              className="max-w-full h-auto rounded-2xl shadow-lg border-4 border-white"
-            />
+        <div className="p-6 overflow-y-auto max-h-[70vh] bg-gray-50/50">
+          {isLoading ? (
+            <div className="flex justify-center py-20">
+               <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600"></div>
+            </div>
+          ) : schedules.length > 0 ? (
+            <div className="space-y-4">
+              {schedules.map((item, index) => (
+                <div key={index} className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm flex items-center justify-between group hover:border-blue-200 transition-all">
+                  <div className="flex items-center gap-4">
+                    <div className="w-12 h-12 bg-blue-50 text-blue-600 rounded-xl flex items-center justify-center text-xl font-black">
+                      {index + 1}
+                    </div>
+                    <div>
+                      <h4 className="font-black text-gray-800 leading-tight">{item.subject}</h4>
+                      <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest mt-1">{item.teacher}</p>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-sm font-black text-blue-600 tracking-tighter">{item.start_time} - {item.end_time}</p>
+                    <p className="text-[9px] font-black text-gray-300 uppercase tracking-widest mt-1">WIB</p>
+                  </div>
+                </div>
+              ))}
+            </div>
           ) : (
             <div className="flex flex-col items-center justify-center py-16 text-center">
               <div className="w-24 h-24 bg-gray-100 rounded-3xl flex items-center justify-center mb-6 text-gray-300 shadow-inner">
                 <FaBookOpen size={48} />
               </div>
               <h3 className="text-xl font-black text-gray-800 mb-2">Belum Ada Jadwal</h3>
-              <p className="text-gray-500 text-sm max-w-xs leading-relaxed">Admin sekolah belum mengunggah jadwal pelajaran untuk kelas Anda.</p>
+              <p className="text-gray-500 text-sm max-w-xs leading-relaxed">Tidak ada jadwal pembelajaran yang tercatat untuk hari ini.</p>
             </div>
           )}
         </div>
@@ -241,8 +259,8 @@ const DashboardSiswa = () => {
   const [profileImage, setProfileImage] = useState(null);
   const [alertState, setAlertState] = useState({ show: false, type: '', title: '', message: '', action: null });
 
-  const [profile, setProfile] = useState(() => {
-    const userData = JSON.parse(localStorage.getItem('userData') || '{}');
+  const [profile] = useState(() => {
+    const userData = JSON.parse(localStorage.getItem('user_data') || '{}');
     return {
       name: userData.name || 'Siswa',
       kelas: typeof userData.class_name === 'object' ? userData.class_name?.name : (userData.class_name || '-'),
@@ -252,6 +270,8 @@ const DashboardSiswa = () => {
   const [weeklyStats, setWeeklyStats] = useState({ hadir: 0, izin: 0, sakit: 0, alpha: 0 });
   const [monthlyTrend, setMonthlyTrend] = useState([]);
   const [scheduleImage, setScheduleImage] = useState(null);
+  const [todaySchedule, setScheduleToday] = useState([]);
+  const [isLoadingSchedule, setIsLoadingSchedule] = useState(true);
 
   useEffect(() => {
     const timer = setInterval(() => setCurrentDateTime(new Date()), 1000);
@@ -259,12 +279,15 @@ const DashboardSiswa = () => {
   }, []);
 
   useEffect(() => {
-    const fetchAttendanceSummary = async () => {
+    const controller = new AbortController();
+    
+    const fetchDashboardData = async () => {
       try {
-        const response = await getMyAttendanceSummary();
-        const data = response.data;
-        if (data.status_summary) {
-          const stats = data.status_summary.reduce((acc, item) => {
+        // Fetch Attendance Summary
+        const summaryResponse = await getMyAttendanceSummary({ signal: controller.signal });
+        const summaryData = summaryResponse.data;
+        if (summaryData.status_summary) {
+          const stats = summaryData.status_summary.reduce((acc, item) => {
             const status = item.status.toLowerCase();
             if (status === 'present') acc.hadir = item.total;
             else if (status === 'excused' || status === 'izin') acc.izin = item.total;
@@ -275,23 +298,44 @@ const DashboardSiswa = () => {
           setWeeklyStats(stats);
         }
 
-        if (data.daily_summary) {
-          const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun'];
-          const monthlyArray = monthNames.map(m => ({
-            month: m,
-            percentage: Math.floor(Math.random() * (100 - 85 + 1)) + 85 // Mock for UI visual
-          }));
-          setMonthlyTrend(monthlyArray);
+        if (summaryData.daily_summary) {
+          const monthlyData = summaryData.daily_summary.reduce((acc, item) => {
+            const date = new Date(item.day);
+            const monthName = date.toLocaleString('id-ID', { month: 'short' });
+            if (!acc[monthName]) acc[monthName] = { present: 0, total: 0 };
+            acc[monthName].total += item.total;
+            if (item.status === 'present' || item.status === 'late') acc[monthName].present += item.total;
+            return acc;
+          }, {});
+
+          const monthlyArray = Object.keys(monthlyData).map(month => ({
+            month: month,
+            percentage: Math.round((monthlyData[month].present / monthlyData[month].total) * 100)
+          })).slice(-6);
+
+          if (monthlyArray.length > 0) setMonthlyTrend(monthlyArray);
         }
-      } catch (error) { console.error('Error fetching attendance summary:', error); }
+
+        // Fetch Today's Schedule
+        const { default: apiClient } = await import('../../services/api');
+        const scheduleRes = await apiClient.get('/me/dashboard/summary', { signal: controller.signal });
+        setScheduleToday(scheduleRes.data.schedule_today || []);
+        
+      } catch (error) { 
+        if (error.name !== 'AbortError') console.error('Error fetching dashboard data:', error); 
+      } finally {
+        setIsLoadingSchedule(false);
+      }
     };
-    fetchAttendanceSummary();
+
+    fetchDashboardData();
+    return () => controller.abort();
   }, []);
 
   const handleLogout = () => {
-    localStorage.removeItem('token');
-    localStorage.removeItem('userData');
-    localStorage.removeItem('userRole');
+    localStorage.removeItem('auth_token');
+    localStorage.removeItem('user_data');
+    localStorage.removeItem('user_role');
     window.location.href = '/';
   };
 
@@ -392,8 +436,19 @@ const DashboardSiswa = () => {
 
             <div className="bg-gradient-to-br from-indigo-50 to-blue-50 rounded-[1.5rem] p-6 mb-6 border border-indigo-100 relative overflow-hidden flex-1 flex flex-col justify-center">
                 <div className="relative z-10">
-                    <p className="text-[10px] text-indigo-400 font-black uppercase tracking-widest mb-1">Status Jadwal</p>
-                    <h4 className="text-2xl font-black text-indigo-900 leading-tight">Mata Pelajaran <br/> Tersedia</h4>
+                    <p className="text-[10px] text-indigo-400 font-black uppercase tracking-widest mb-1">
+                        {isLoadingSchedule ? 'Memuat Jadwal...' : (todaySchedule.length > 0 ? 'Pelajaran Hari Ini' : 'Tidak Ada Jadwal')}
+                    </p>
+                    <h4 className="text-2xl font-black text-indigo-900 leading-tight">
+                        {todaySchedule.length > 0 
+                            ? (todaySchedule.find(s => {
+                                const now = new Date();
+                                const start = new Date(now.toDateString() + ' ' + s.start_time);
+                                const end = new Date(now.toDateString() + ' ' + s.end_time);
+                                return now >= start && now <= end;
+                              })?.subject || todaySchedule[0].subject)
+                            : 'Mata Pelajaran Belum Tersedia'}
+                    </h4>
                 </div>
                 <FaBookOpen size={80} className="absolute right-[-10px] bottom-[-10px] text-indigo-200/50 transform rotate-12" />
             </div>
@@ -414,7 +469,12 @@ const DashboardSiswa = () => {
         </div>
       </main>
 
-      <SubjectsModal isOpen={showSubjects} onClose={() => setShowSubjects(false)} scheduleImage={scheduleImage} />
+      <SubjectsModal 
+        isOpen={showSubjects} 
+        onClose={() => setShowSubjects(false)} 
+        schedules={todaySchedule} 
+        isLoading={isLoadingSchedule} 
+      />
       
       <ProfileModal 
         isOpen={showProfile} 

@@ -41,14 +41,44 @@ export default function KehadiranSiswa({
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
   const [selectedJurusan, setSelectedJurusan] = useState("");
   const [selectedKelas, setSelectedKelas] = useState("");
-
-  // Data kosong (menunggu integrasi backend)
-  const [kelasData] = useState<KelasRow[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [kelasData, setKelasData] = useState<KelasRow[]>([]);
 
   useEffect(() => {
     const handleResize = () => setIsMobile(window.innerWidth < 768);
     window.addEventListener("resize", handleResize);
     return () => window.removeEventListener("resize", handleResize);
+  }, []);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    
+    const fetchData = async () => {
+      setLoading(true);
+      try {
+        const { classService } = await import("../../services/class");
+        const data = await classService.getClasses();
+        
+        const mappedData: KelasRow[] = data.map((c: any) => ({
+          id: c.id.toString(),
+          tingkat: c.grade as any,
+          namaKelas: c.name || `${c.grade} ${c.label}`,
+          namaJurusan: c.major?.name || "-",
+          waliKelas: c.homeroom_teacher?.user?.name || "-",
+        }));
+        
+        setKelasData(mappedData);
+      } catch (error: any) {
+        if (error.name !== 'AbortError') {
+          console.error("Failed to fetch classes", error);
+        }
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchData();
+    return () => controller.abort();
   }, []);
 
   // Filter data sesuai jurusan & kelas
@@ -155,7 +185,7 @@ export default function KehadiranSiswa({
           data={filteredData}
           onView={handleViewDetail}
           keyField="id"
-          emptyMessage="Belum ada data kelas."
+          emptyMessage={loading ? "Memuat data..." : "Belum ada data kelas."}
         />
       </div>
     </StaffLayout>

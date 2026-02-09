@@ -15,31 +15,35 @@ class MobileNotificationController extends Controller
     {
         $user = $request->user();
         $date = $request->query('date', now()->format('Y-m-d'));
-        
-        $notifications = $this->generateNotifications($user, $date);
-        
+
+        $cacheKey = "notifications.{$user->id}.{$date}";
+
+        $notifications = \Illuminate\Support\Facades\Cache::remember($cacheKey, 300, function () use ($user, $date) {
+            return $this->generateNotifications($user, $date);
+        });
+
         return response()->json([
             'date' => $date,
             'notifications' => $notifications,
         ]);
     }
-    
+
     /**
      * Generate notifications based on user role and attendance data
      */
     private function generateNotifications($user, $date): array
     {
         $notifications = [];
-        
+
         if ($user->user_type === 'teacher') {
             $notifications = $this->generateTeacherNotifications($user, $date);
         } elseif ($user->user_type === 'student') {
             $notifications = $this->generateStudentNotifications($user, $date);
         }
-        
+
         return $notifications;
     }
-    
+
     /**
      * Generate notifications for teachers
      */
@@ -47,11 +51,11 @@ class MobileNotificationController extends Controller
     {
         $notifications = [];
         $teacherId = $user->teacherProfile?->id;
-        
+
         if (! $teacherId) {
             return $notifications;
         }
-        
+
         // Notifikasi kehadiran mengajar hari ini
         $teachingAttendances = Attendance::whereHas('schedule', function ($q) use ($teacherId) {
             $q->where('teacher_id', $teacherId);
@@ -60,7 +64,7 @@ class MobileNotificationController extends Controller
             ->whereDate('date', $date)
             ->with('schedule.subject:id,name', 'schedule.class:id,name')
             ->get();
-        
+
         foreach ($teachingAttendances as $attendance) {
             $type = match ($attendance->status) {
                 'present' => 'tepat_waktu',
@@ -68,14 +72,14 @@ class MobileNotificationController extends Controller
                 'dinas' => 'dinas',
                 default => 'other',
             };
-            
+
             $message = match ($attendance->status) {
                 'present' => 'Anda mengajar tepat waktu pada',
                 'late' => 'Anda terlambat mengajar pada',
                 'dinas' => 'Anda sedang dinas pada',
                 default => 'Status kehadiran',
             };
-            
+
             $notifications[] = [
                 'id' => $attendance->id,
                 'type' => $type,
@@ -89,7 +93,7 @@ class MobileNotificationController extends Controller
                 'created_at' => $attendance->created_at->toIso8601String(),
             ];
         }
-        
+
         // Cek siswa yang alpha hari ini
         $alphaCount = Attendance::whereHas('schedule', function ($q) use ($teacherId) {
             $q->where('teacher_id', $teacherId);
@@ -98,7 +102,7 @@ class MobileNotificationController extends Controller
             ->where('status', 'absent')
             ->whereDate('date', $date)
             ->count();
-        
+
         if ($alphaCount > 0) {
             $notifications[] = [
                 'id' => 'alpha_'.now()->timestamp,
@@ -109,7 +113,7 @@ class MobileNotificationController extends Controller
                 'created_at' => now()->toIso8601String(),
             ];
         }
-        
+
         // Cek siswa yang perlu tindak lanjut (alpha >= 3 dalam sebulan terakhir)
         $problematicStudents = Attendance::whereHas('schedule', function ($q) use ($teacherId) {
             $q->where('teacher_id', $teacherId);
@@ -121,7 +125,7 @@ class MobileNotificationController extends Controller
             ->groupBy('student_id')
             ->having('alpha_count', '>=', 3)
             ->count();
-        
+
         if ($problematicStudents > 0) {
             $notifications[] = [
                 'id' => 'followup_'.now()->timestamp,
@@ -132,10 +136,10 @@ class MobileNotificationController extends Controller
                 'created_at' => now()->toIso8601String(),
             ];
         }
-        
+
         return $notifications;
     }
-    
+
     /**
      * Generate notifications for students
      */
@@ -143,17 +147,17 @@ class MobileNotificationController extends Controller
     {
         $notifications = [];
         $studentId = $user->studentProfile?->id;
-        
+
         if (! $studentId) {
             return $notifications;
         }
-        
+
         // Notifikasi kehadiran hari ini
         $attendances = Attendance::where('student_id', $studentId)
             ->whereDate('date', $date)
             ->with('schedule.subject:id,name')
             ->get();
-        
+
         foreach ($attendances as $attendance) {
             $type = match ($attendance->status) {
                 'present' => 'hadir',
@@ -163,7 +167,7 @@ class MobileNotificationController extends Controller
                 'absent' => 'alpha',
                 default => 'other',
             };
-            
+
             $message = match ($attendance->status) {
                 'present' => 'Anda hadir tepat waktu',
                 'late' => 'Anda terlambat',
@@ -172,7 +176,7 @@ class MobileNotificationController extends Controller
                 'absent' => 'Anda tidak hadir',
                 default => 'Status kehadiran',
             };
-            
+
             $notifications[] = [
                 'id' => $attendance->id,
                 'type' => $type,
@@ -182,7 +186,7 @@ class MobileNotificationController extends Controller
                 'created_at' => $attendance->created_at->toIso8601String(),
             ];
         }
-        
+
         return $notifications;
     }
 }

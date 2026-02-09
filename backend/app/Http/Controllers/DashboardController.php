@@ -10,7 +10,6 @@ use App\Models\StudentProfile;
 use App\Models\TeacherProfile;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-
 use Illuminate\Support\Facades\Cache;
 
 class DashboardController extends Controller
@@ -78,12 +77,17 @@ class DashboardController extends Controller
             ->orderBy('start_time')
             ->get();
 
-        $scheduleToday = $schedules->map(function ($schedule) use ($student, $today) {
-            // Get attendance for this schedule today
-            $attendance = Attendance::where('student_id', $student->id)
-                ->where('schedule_id', $schedule->id)
-                ->whereDate('date', $today)
-                ->first();
+        $scheduleIds = $schedules->pluck('id');
+
+        // Fetch all attendances for these schedules today in one query
+        $attendances = Attendance::where('student_id', $student->id)
+            ->whereIn('schedule_id', $scheduleIds)
+            ->whereDate('date', $today)
+            ->get()
+            ->keyBy('schedule_id');
+
+        $scheduleToday = $schedules->map(function ($schedule) use ($attendances) {
+            $attendance = $attendances->get($schedule->id);
 
             return [
                 'id' => $schedule->id,
@@ -252,8 +256,7 @@ class DashboardController extends Controller
     public function wakaDashboard(Request $request): JsonResponse
     {
         $today = now()->format('Y-m-d');
-        
-        // Cache for 10 minutes, but cleared on new attendance
+
         $data = Cache::remember("dashboard.waka.{$today}", 600, function () use ($today) {
             $startOfMonth = now()->startOfMonth()->format('Y-m-d');
             $endOfMonth = now()->endOfMonth()->format('Y-m-d');
@@ -271,39 +274,40 @@ class DashboardController extends Controller
                 'sakit' => $todayStats->get('sick', 0),
                 'alpha' => $todayStats->get('absent', 0),
                 'terlambat' => $todayStats->get('late', 0),
-                'pulang' => 0, 
+                'pulang' => $todayStats->get('return', 0),
             ];
 
-            // 2. Tren Bulanan (Monthly Trend)
-            $monthlyData = Attendance::whereBetween('date', [$startOfMonth, $endOfMonth])
-                ->selectRaw('DATE(date) as date, status, count(*) as count')
-                ->groupBy('date', 'status')
-                ->get()
-                ->groupBy('date');
+            // 2. Tren Bulanan (Last 6 Months Trend)
+            $sixMonthsAgo = now()->subMonths(5)->startOfMonth()->format('Y-m-d');
+            
+            $monthlyData = Attendance::whereBetween('date', [$sixMonthsAgo, $today])
+                ->selectRaw('DATE(date) as date_only, status, count(*) as count')
+                ->groupBy('date_only', 'status')
+                ->get();
 
             $trend = [];
-            $currentDate = now()->startOfMonth();
-            while ($currentDate <= now()->endOfMonth()) {
-                $dateStr = $currentDate->format('Y-m-d');
-                $dayData = $monthlyData->get($dateStr, collect([]));
+            // We'll group by month for the 6-month chart
+            $dataByMonth = $monthlyData->groupBy(function($item) {
+                return Carbon::parse($item->date_only)->format('Y-m');
+            });
 
-                $hadir = $dayData->where('status', 'present')->sum('count');
-                $izin = $dayData->whereIn('status', ['izin', 'excused'])->sum('count');
-                $sakit = $dayData->where('status', 'sick')->sum('count');
-                $alpha = $dayData->where('status', 'absent')->sum('count');
-                $terlambat = $dayData->where('status', 'late')->sum('count');
+            for ($i = 5; $i >= 0; $i--) {
+                $monthDate = now()->subMonths($i);
+                $monthKey = $monthDate->format('Y-m');
+                $monthRecords = $dataByMonth->get($monthKey, collect([]));
+                
+                $total = $monthRecords->sum('count');
+                $present = $monthRecords->whereIn('status', ['present', 'late'])->sum('count');
 
                 $trend[] = [
-                    'date' => $dateStr,
-                    'label' => $currentDate->format('d M'), 
-                    'hadir' => $hadir,
-                    'izin' => $izin,
-                    'sakit' => $sakit,
-                    'alpha' => $alpha,
-                    'terlambat' => $terlambat,
+                    'month' => $monthDate->locale('id')->translatedFormat('M'),
+                    'full_month' => $monthDate->locale('id')->translatedFormat('F Y'),
+                    'percentage' => $total > 0 ? round(($present / $total) * 100) : 0,
+                    'total_logs' => $total,
+                    'present' => $present,
+                    'absent' => $monthRecords->where('status', 'absent')->sum('count'),
+                    'sick_excused' => $monthRecords->whereIn('status', ['sick', 'excused', 'izin'])->sum('count'),
                 ];
-
-                $currentDate->addDay();
             }
 
             return [

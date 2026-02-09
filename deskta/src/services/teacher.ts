@@ -15,6 +15,8 @@ export interface Teacher {
         name: string;
     } | null;
     schedule_image_path?: string | null;
+    gender?: 'L' | 'P';
+    role?: string;
 }
 
 export interface TeacherResponse {
@@ -37,6 +39,14 @@ export const teacherService = {
             return response.data;
         }
         return [];
+    },
+
+    /**
+     * Get a teacher by ID
+     */
+    async getTeacherById(id: string | number): Promise<Teacher> {
+        const response = await apiClient.get(`${API_ENDPOINTS.TEACHERS}/${id}`);
+        return response.data.data || response.data;
     },
 
     /**

@@ -48,7 +48,7 @@ export default function KehadiranSiswaRekap() {
     fetchClasses();
   }, []);
 
-  const fetchRecap = async () => {
+  const fetchRecap = React.useCallback(async () => {
     if (!selectedClassId) return;
     try {
       setLoading(true);
@@ -61,11 +61,11 @@ export default function KehadiranSiswaRekap() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [selectedClassId, tanggalMulai, tanggalSampai]);
 
   useEffect(() => {
     fetchRecap();
-  }, [selectedClassId]);
+  }, [fetchRecap]);
 
   const handleApplyPeriode = () => {
     fetchRecap();

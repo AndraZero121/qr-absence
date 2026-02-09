@@ -17,10 +17,10 @@ const LandingPage = () => {
     const roleRoutes = {
       'Admin': '/login/admin',
       'Waka': '/login/waka',
-      'Peserta Didik': '/login/peserta-didik',
+      'Peserta Didik': '/login/siswa',
       'Guru': '/login/guru',
-      'Wali Kelas': '/login/wali-kelas',
-      'Pengurus Kelas': '/login/pengurus-kelas'
+      'Wali Kelas': '/login/wakel',
+      'Pengurus Kelas': '/login/pengurus_kelas'
     };
     navigate(roleRoutes[role]);
   };

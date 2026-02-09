@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { 
   FaArrowLeft, 
@@ -15,7 +15,6 @@ import {
   FaFileAlt
 } from 'react-icons/fa';
 import CustomAlert from '../../components/Common/CustomAlert';
-import apiClient from '../../services/api';
 import { getAttendanceBySchedule, createManualAttendance } from '../../services/attendance';
 import echo from '../../utils/echo';
 import PageWrapper from '../../components/ui/PageWrapper';
@@ -28,7 +27,7 @@ function PresensiSiswa() {
   const hasScheduleData = !!id;
 
   const [siswaList, setSiswaList] = useState([]);
-  const [isLoading, setIsLoading] = useState(false);
+  const [setIsLoading] = useState(false);
   const [mode, setMode] = useState('view'); // 'view' or 'input'
   const [showKeteranganModal, setShowKeteranganModal] = useState(false);
   const [currentSiswaIndex, setCurrentSiswaIndex] = useState(null);
@@ -37,16 +36,10 @@ function PresensiSiswa() {
   const [alertState, setAlertState] = useState({ show: false, type: 'info', title: '', message: '', action: null });
 
   // Load attendance data
-  useEffect(() => {
-    if (hasScheduleData) {
-      fetchAttendance();
-    }
-  }, [id]);
-
-  const fetchAttendance = async () => {
+  const fetchAttendance = useCallback(async (signal) => {
     setIsLoading(true);
     try {
-      const data = await getAttendanceBySchedule(id);
+      const data = await getAttendanceBySchedule(id, { signal });
       setSiswaList(data);
       if (data.length > 0 && data.every(s => s.status === 'absent' && !s.attendance_id)) {
         setMode('input');
@@ -54,11 +47,34 @@ function PresensiSiswa() {
         setMode('view');
       }
     } catch (error) {
-      console.error("Error fetching attendance:", error);
+      if (error && error.name !== 'AbortError') {
+        console.error("Error fetching attendance:", error);
+      }
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [id, setIsLoading]);
+
+  // Load attendance data
+  useEffect(() => {
+    const controller = new AbortController();
+    
+    if (hasScheduleData) {
+      fetchAttendance(controller.signal);
+      
+      // Listen for real-time updates
+      const channel = echo.private(`schedule.${id}`)
+        .listen('AttendanceRecorded', (e) => {
+          console.log('Real-time attendance recorded:', e);
+          fetchAttendance(controller.signal);
+        });
+
+      return () => {
+        channel.stopListening('AttendanceRecorded');
+        controller.abort();
+      };
+    }
+  }, [id, hasScheduleData, fetchAttendance]);
 
   const handleStatusChange = (index, status) => {
     const newList = [...siswaList];
@@ -102,7 +118,7 @@ function PresensiSiswa() {
         setAlertState({ show: true, type: 'success', title: 'Berhasil', message: 'Data presensi berhasil disimpan.' });
         setMode('view');
         fetchAttendance();
-      } catch (error) {
+      } catch {
         setAlertState({ show: true, type: 'error', title: 'Gagal', message: 'Gagal menyimpan data presensi.' });
       } finally {
         setIsLoading(false);

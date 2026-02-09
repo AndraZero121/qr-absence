@@ -77,27 +77,7 @@ function XIcon({ size = 24 }: { size?: number }) {
   );
 }
 
-// Icon check untuk status hadir
-function CheckIcon({ size = 24 }: { size?: number }) {
-  return (
-    <svg
-      width={size}
-      height={size}
-      viewBox="0 0 24 24"
-      fill="none"
-      xmlns="http://www.w3.org/2000/svg"
-      style={{ display: 'inline-block', verticalAlign: 'middle' }}
-    >
-      <path
-        d="M20 6L9 17L4 12"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
-}
+
 
 export function InputAbsenWalikelas({
   user,
@@ -114,7 +94,7 @@ export function InputAbsenWalikelas({
   });
 
   const [siswaList, setSiswaList] = useState<Siswa[]>([]);
-  const [loading, setLoading] = useState(false);
+
   const [classId, setClassId] = useState<number | null>(null);
   const [scheduleId, setScheduleId] = useState<number | null>(null);
 
@@ -140,7 +120,7 @@ export function InputAbsenWalikelas({
     if (!classId) return;
 
     const fetchData = async () => {
-      setLoading(true);
+
       try {
         const { attendanceService } = await import('../../services/attendance');
         const { dashboardService } = await import('../../services/dashboard');
@@ -193,7 +173,7 @@ export function InputAbsenWalikelas({
         console.error(e);
         void popupAlert("Gagal memuat data siswa");
       } finally {
-        setLoading(false);
+
       }
     };
     fetchData();
@@ -252,7 +232,7 @@ export function InputAbsenWalikelas({
 
       // Loop through and save each
       const promises = siswaWithStatus.map(s => {
-        let backendStatus = STATUS_FRONTEND_TO_BACKEND[s.status!] || 'present';
+        const backendStatus = STATUS_FRONTEND_TO_BACKEND[s.status!] || 'present';
 
         let reason = s.keterangan;
         // Basic mapping for returning home/pulang

@@ -1,7 +1,6 @@
-import { useState, useEffect } from 'react';
-import { Calendar, BookOpen, X, QrCode } from 'lucide-react';
+import { useState, useEffect, useCallback } from 'react';
+import { FaCalendarAlt, FaBook, FaTimes, FaQrcode } from 'react-icons/fa';
 import QRCode from 'qrcode';
-import './PresensiKelas.css';
 import PageWrapper from '../../components/ui/PageWrapper';
 
 const scheduleData = [
@@ -88,6 +87,7 @@ function PresensiKelas() {
     };
 
     // Set initial date
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setCurrentDate(formatDate());
 
     // Update date every minute
@@ -99,20 +99,23 @@ function PresensiKelas() {
     return () => clearInterval(interval);
   }, []);
 
-  useEffect(() => {
-    if (showQRModal && selectedQR) {
-      generateQR(selectedQR.qrData);
-    }
-  }, [showQRModal, selectedQR]);
-
-  const generateQR = async (text) => {
+  const generateQR = useCallback(async (text) => {
     try {
       const url = await QRCode.toDataURL(text, { width: 300, margin: 2 });
       setQrCodeUrl(url);
     } catch (err) {
       console.error(err);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    if (showQRModal && selectedQR) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      generateQR(selectedQR.qrData);
+    }
+  }, [showQRModal, selectedQR, generateQR]);
+
+  /* generateQR moved */
 
   const handleQRClick = (schedule) => {
     setSelectedQR(schedule);
@@ -126,29 +129,14 @@ function PresensiKelas() {
   };
 
   return (
-    <PageWrapper className="flex h-[calc(100vh-4rem)] bg-gray-50 overflow-hidden">
-      {/* Left Sidebar */}
-      <aside className="w-80 bg-white border-r border-gray-200 hidden md:flex flex-col items-center py-10 z-10">
-        <div className="flex flex-col items-center gap-6 w-full px-6">
-          <div className="w-28 h-28 bg-indigo-50 rounded-full flex items-center justify-center text-indigo-600 border-4 border-indigo-100 shadow-sm">
-            <BookOpen size={60} strokeWidth={1.5} />
-          </div>
-          <div className="text-center w-full">
-            <h2 className="text-xl font-bold text-gray-800 leading-tight mb-2">XII Rekayasa Perangkat Lunak 2</h2>
-            <div className="h-1 w-12 bg-indigo-500 mx-auto rounded-full mb-3"></div>
-            <p className="text-sm font-medium text-gray-500 uppercase tracking-wide">Wali Kelas</p>
-            <p className="text-base text-gray-700 font-semibold">Triana Ardianie S.Pd</p>
-          </div>
-        </div>
-      </aside>
-
+    <PageWrapper className="flex h-full bg-gray-50 overflow-hidden">
       {/* Right Content */}
       <main className="flex-1 overflow-y-auto p-6 md:p-8 flex flex-col gap-6 relative z-0">
         {/* Date Header */}
         <div className="flex justify-between items-center bg-white p-4 rounded-xl shadow-sm border border-gray-200">
           <h1 className="text-2xl font-bold text-gray-800">Jadwal Pelajaran</h1>
           <div className="flex items-center gap-2 bg-gray-100 px-4 py-2 rounded-lg text-gray-700 font-medium border border-gray-200">
-            <Calendar size={20} className="text-indigo-600" />
+            <FaCalendarAlt size={20} className="text-indigo-600" />
             <span>{currentDate}</span>
           </div>
         </div>
@@ -163,7 +151,7 @@ function PresensiKelas() {
               <div className="flex justify-between items-start mb-4">
                 <div className="flex gap-4">
                   <div className="w-12 h-12 bg-indigo-50 text-indigo-600 rounded-lg flex items-center justify-center shrink-0 group-hover:bg-indigo-600 group-hover:text-white transition-colors duration-300">
-                    <BookOpen size={24} />
+                    <FaBook size={24} />
                   </div>
                   <div>
                     <h3 className="text-lg font-bold text-gray-800 leading-tight group-hover:text-indigo-700 transition-colors">{schedule.subject}</h3>
@@ -182,7 +170,7 @@ function PresensiKelas() {
                   onClick={() => handleQRClick(schedule)}
                   title="Scan QR Code"
                 >
-                  <QrCode size={24} strokeWidth={2} />
+                  <FaQrcode size={24} />
                 </button>
               </div>
             </div>
@@ -206,7 +194,7 @@ function PresensiKelas() {
                 className="text-white/80 hover:text-white transition-colors bg-white/10 hover:bg-white/20 p-1.5 rounded-full relative z-10" 
                 onClick={closeQRModal}
               >
-                <X size={20} strokeWidth={2.5} />
+                <FaTimes size={20} />
               </button>
             </div>
             

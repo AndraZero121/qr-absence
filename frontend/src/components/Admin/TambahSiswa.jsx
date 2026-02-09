@@ -1,4 +1,5 @@
 // Tambah.jsx
+/* eslint-disable react-hooks/set-state-in-effect */
 import React, { useState, useEffect } from 'react';
 import './TambahSiswa.css';
 
@@ -18,6 +19,7 @@ function Tambah({ isOpen, onClose, onSubmit, editData, classes = [] }) {
   useEffect(() => {
     // Extract unique majors
     if (classes.length > 0) {
+      // Classes might have major as an object or a string
       // Classes might have major as an object or a string
       const majors = [...new Set(classes.map(c => c.major?.name || c.major).filter(Boolean))];
       setAvailableMajors(majors.sort());

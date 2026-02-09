@@ -35,6 +35,7 @@ export default function QRScanner({ onScan, onError, isActive }) {
             scannerRef.current = scanner;
         } catch (err) {
             console.error('Failed to start scanner:', err);
+            // eslint-disable-next-line react-hooks/set-state-in-effect
             setHasCamera(false);
             onError?.('Tidak dapat mengakses kamera. Pastikan izin kamera diberikan.');
         }

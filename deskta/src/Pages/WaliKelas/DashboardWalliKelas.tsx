@@ -337,6 +337,8 @@ export default function DashboardWalliKelas({
 
   // Fetch homeroom data
   useEffect(() => {
+    const controller = new AbortController();
+    
     const fetchHomeroomData = async () => {
       try {
         const { dashboardService } = await import('../../services/dashboard');
@@ -354,14 +356,18 @@ export default function DashboardWalliKelas({
         const schedulesData = await dashboardService.getMyHomeroomSchedules({ date: today });
         const formattedSchedules = schedulesData.map(formatScheduleFromAPI);
         setSchedules(formattedSchedules);
-      } catch (error) {
-        console.error('Failed to fetch homeroom data:', error);
+      } catch (error: any) {
+        if (error.name !== 'AbortError') {
+          console.error('Failed to fetch homeroom data:', error);
+        }
       } finally {
         setIsLoadingData(false);
       }
     };
 
     fetchHomeroomData();
+    
+    return () => controller.abort();
   }, []);
 
   const handleMenuClick = (page: string, payload?: any) => {
@@ -375,10 +381,6 @@ export default function DashboardWalliKelas({
     setActiveModal(null);
   };
 
-  const handleScheduleClick = (item: ScheduleItem) => {
-    setSelectedSchedule(item);
-    setActiveModal("schedule");
-  };
 
   const handleActionClick = (e: React.MouseEvent, item: ScheduleItem) => {
     e.stopPropagation();
@@ -413,12 +415,6 @@ export default function DashboardWalliKelas({
     console.log("QR Code dipilih");
     await popupAlert("QR Code Absen akan ditampilkan di sini.");
     setActiveModal(null);
-  };
-
-  const handlePilihManual = () => {
-    console.log("Input Manual dipilih");
-    setActiveModal(null);
-    setCurrentPage("input-manual");
   };
 
   const handlePilihMetodeDariTidakBisaMengajar = () => {
@@ -692,7 +688,6 @@ export default function DashboardWalliKelas({
           isOpen={activeModal === "metode"}
           onClose={() => setActiveModal(null)}
           onPilihQR={handlePilihQR}
-          onPilihManual={handlePilihManual}
           onTidakBisaMengajar={handleTidakBisaMengajar}
         />
 

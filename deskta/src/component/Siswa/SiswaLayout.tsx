@@ -4,7 +4,7 @@ import Sidebar from "../Sidebar";
 import { useLocalLenis } from "../Shared/SmoothScroll";
 import LogoSchool from "../../assets/Icon/logo smk.png";
 
-type MenuKey = "dashboard" | "jadwal-anda" | "absensi" | "notifikasi";
+export type MenuKey = "dashboard" | "jadwal-anda" | "absensi" | "notifikasi";
 
 interface SiswaLayoutProps {
   user: { name: string; phone: string };

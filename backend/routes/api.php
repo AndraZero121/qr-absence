@@ -49,7 +49,7 @@ Route::middleware(['auth:sanctum', 'activity', 'throttle:api'])->group(function 
 
     // Public teachers list (read-only for mobile app)
     Route::get('/teachers', [TeacherController::class, 'index'])->middleware('role:admin,student,teacher');
-    
+
     // Public classes list (read-only for mobile/web app)
     Route::get('/classes', [ClassController::class, 'index'])->middleware('role:admin,teacher,student');
     Route::get('/majors', [MajorController::class, 'index'])->middleware('role:admin,teacher,student');
@@ -99,7 +99,7 @@ Route::middleware(['auth:sanctum', 'activity', 'throttle:api'])->group(function 
         Route::post('/qrcodes/generate', [QrCodeController::class, 'generate']);
         Route::post('/me/class/qr-token', [QrCodeController::class, 'generate']); // Alias for Webta
         Route::post('/qrcodes/{token}/revoke', [QrCodeController::class, 'revoke']);
-        
+
         // Manual attendance (Shared for Admin/Teacher)
         Route::post('/attendance/manual', [AttendanceController::class, 'manual']);
     });
@@ -115,8 +115,14 @@ Route::middleware(['auth:sanctum', 'activity', 'throttle:api'])->group(function 
         Route::get('/attendance/classes/{class}/summary', [AttendanceController::class, 'summaryByClass']);
         Route::post('/attendance/{attendance}/attachments', [AttendanceController::class, 'attach']);
         Route::post('/attendance/{attendance}/document', [AttendanceController::class, 'attach']); // Alias for Webta
-        Route::get('/attendance/{attendance}/document', [AttendanceController::class, 'getDocument']);
         Route::post('/attendance/{attendance}/void', [AttendanceController::class, 'void']);
+    });
+
+    Route::middleware('role:admin,teacher,student')->group(function (): void {
+        Route::get('/attendance/{attendance}/document', [AttendanceController::class, 'getDocument']);
+        Route::get('/attendance/document/proxy/{path}', [AttendanceController::class, 'proxyDocument'])
+            ->where('path', '.*')
+            ->name('attendance.document.proxy');
     });
 
     Route::middleware('role:teacher')->group(function (): void {

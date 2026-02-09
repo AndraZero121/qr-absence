@@ -119,8 +119,8 @@ export function KehadiranSiswaWakel({
         let mappedRows: KehadiranRow[] = [];
 
         if (Array.isArray(data)) {
-          mappedRows = data.map((item: any) => ({
-            id: item.id?.toString() || `temp-${Math.random()}`,
+          mappedRows = data.map((item: any, index: number) => ({
+            id: item.id?.toString() || `attendance-${item.student_id}-${index}-${Date.now()}`,
             studentId: item.student_id?.toString(),
             scheduleId: item.schedule_id,
             nisn: item.student?.nisn || '-',
@@ -208,7 +208,7 @@ export function KehadiranSiswaWakel({
 
   const filteredRows = useMemo(() => {
     // Filter mapel
-    let filtered = selectedMapel === 'all' ? rows : rows.filter((r) => r.mataPelajaran === selectedMapel);
+    const filtered = selectedMapel === 'all' ? rows : rows.filter((r) => r.mataPelajaran === selectedMapel);
     return filtered;
   }, [rows, selectedMapel]);
 

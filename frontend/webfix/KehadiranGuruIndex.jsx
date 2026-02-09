@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import './KehadiranGuruIndex.css';
 import NavbarWaka from '../../components/Waka/NavbarWaka';
@@ -6,7 +6,7 @@ import { FaCalendar, FaClock, FaFileExport, FaFilePdf, FaFileExcel, FaEye } from
 
 function KehadiranGuruIndex() {
   const navigate = useNavigate();
-  const [kehadirans, setKehadirans] = useState([
+  const [kehadirans] = useState([
     {
       id: 1,
       guru: {
@@ -47,37 +47,14 @@ function KehadiranGuruIndex() {
     new Date().toISOString().split('T')[0]
   );
 
-  const [deleteModal, setDeleteModal] = useState({ show: false, id: null, namaGuru: '' });
-  const [qrModal, setQrModal] = useState({ show: false, kodeGuru: '', namaGuru: '' });
-  const [whatsappNumber, setWhatsappNumber] = useState('');
+  /* unused vars removed */
 
-  const statusConfig = {
-    Hadir: { bg: 'status-hadir', icon: 'fa-check-circle' },
-    Terlambat: { bg: 'status-terlambat', icon: 'fa-clock' },
-    Izin: { bg: 'status-izin', icon: 'fa-info-circle' },
-    Sakit: { bg: 'status-sakit', icon: 'fa-heartbeat' },
-    Alpha: { bg: 'status-alpha', icon: 'fa-times-circle' },
-    Pulang: { bg: 'status-pulang', icon: 'fas fa-sign-out-alt' },
-    'Belum Absen': { bg: 'status-belum', icon: 'fa-question-circle' },
-    'Tidak Ada Jam Mengajar': { bg: 'status-tidak-mengajar', icon: 'fa-minus-circle' }
-  };
+  /* statusConfig removed */
 
 
-  const handleDelete = (id) => {
-    setKehadirans(prev => prev.filter(k => k.id !== id));
-    setDeleteModal({ show: false, id: null, namaGuru: '' });
-  };
+  /* handleDelete removed */
 
-  useEffect(() => {
-    const esc = (e) => {
-      if (e.key === 'Escape') {
-        setDeleteModal({ show: false, id: null, namaGuru: '' });
-        setQrModal({ show: false, kodeGuru: '', namaGuru: '' });
-      }
-    };
-    document.addEventListener('keydown', esc);
-    return () => document.removeEventListener('keydown', esc);
-  }, []);
+  /* useEffect removed */
 
   const hitungStatus = (jamArray) => {
     const count = {
@@ -270,7 +247,7 @@ function KehadiranGuruIndex() {
 
             <tbody>
               {kehadirans.map((k, i) => {
-                const statusAkhir = hitungStatus(k.jam);
+                hitungStatus(k.jam);
 
                 return (
                   <tr key={k.id}>

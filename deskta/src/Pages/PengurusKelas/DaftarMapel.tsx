@@ -1,15 +1,11 @@
 import { useMemo, useState } from "react";
 import { CalendarDays, School, BookOpen, QrCode, Plus } from "lucide-react";
 import { Modal } from "../../component/Shared/Modal";
+import { QRCodeSVG } from "qrcode.react";
 
 type Mapel = { id: string; name: string; kelas: string };
 
-const mapelList: Mapel[] = [
-  { id: "1", name: "Matematika", kelas: "XII Mekatronika 2" },
-  { id: "2", name: "Matematika", kelas: "XII Mekatronika 2" },
-  { id: "3", name: "Matematika", kelas: "XII Mekatronika 2" },
-  { id: "4", name: "Matematika", kelas: "XII Mekatronika 2" },
-];
+
 
 function formatDDMMYYYY(d: Date) {
   const dd = String(d.getDate()).padStart(2, "0");
@@ -19,6 +15,12 @@ function formatDDMMYYYY(d: Date) {
 }
 
 export default function DaftarMapel() {
+  const [mapelList] = useState<Mapel[]>([
+    { id: "1", name: "Matematika", kelas: "XII Mekatronika 2" },
+    { id: "2", name: "Bahasa Indonesia", kelas: "XII Mekatronika 2" },
+    { id: "3", name: "Bahasa Inggris", kelas: "XII Mekatronika 2" },
+    { id: "4", name: "Kejuruan", kelas: "XII Mekatronika 2" },
+  ]);
   const today = useMemo(() => new Date(), []);
   const todayStr = formatDDMMYYYY(today);
 
@@ -35,10 +37,10 @@ export default function DaftarMapel() {
     setIsQrModalOpen(true);
   };
 
-  const qrUrl = selectedMapel
-    ? `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=ABSENSI-${selectedMapel.id}-${new Date()
+  const qrData = selectedMapel
+    ? `ABSENSI-${selectedMapel.id}-${new Date()
         .toISOString()
-        .split("T")[0]}&format=svg&margin=10&color=2F80ED&bgcolor=ffffff`
+        .split("T")[0]}`
     : "";
 
   return (
@@ -220,16 +222,15 @@ export default function DaftarMapel() {
             border: "1px solid #E5E7EB"
           }}>
             {selectedMapel && (
-              <img 
-                src={qrUrl} 
-                alt="QR Code Presensi" 
-                style={{ 
-                  width: 250, 
-                  height: 250, 
-                  display: "block", 
-                  margin: "0 auto"
-                }} 
-              />
+              <div style={{ display: "flex", justifyContent: "center" }}>
+                <QRCodeSVG 
+                  value={qrData} 
+                  size={250}
+                  level="H"
+                  includeMargin={true}
+                  fgColor="#2F80ED"
+                />
+              </div>
             )}
           </div>
 

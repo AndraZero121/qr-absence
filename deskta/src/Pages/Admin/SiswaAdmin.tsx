@@ -181,7 +181,6 @@ export default function SiswaAdmin({
     const file = e.target.files?.[0];
     if (!file) return;
 
-    // Simple CSV verify
     if (!file.name.toLowerCase().endsWith('.csv') && file.type !== "text/csv") {
       void popupAlert("Format file harus CSV.");
       e.target.value = '';
@@ -189,19 +188,52 @@ export default function SiswaAdmin({
     }
 
     const reader = new FileReader();
-    reader.onload = async () => {
+    reader.onload = async (event) => {
       try {
-        // reuse logic from Deskta version but maybe improve it
-        // For now, implementing basic import for brevity in this rewrite, 
-        // prioritizing reliable format.
-        // const text = event.target?.result as string; // unused
-        // ... (Import logic omitted for brevity in this specific artifact update, 
-        // but we can implement it. Let's stick to the merged version logic which was quite good)
-        // For now, just alert placeholder to save context size if not critical, 
-        // but User likely wants it. I'll implement a basic one.
-        void popupAlert("Fitur Import sedang dalam pengembangan integrasi.");
-      } catch {
-        void popupAlert('Error membaca file');
+        const text = event.target?.result as string;
+        const lines = text.split('\n');
+        const headers = lines[0].split(',').map(h => h.trim().replace(/"/g, ''));
+        
+        const items = lines.slice(1).filter(line => line.trim() !== '').map(line => {
+          const values = line.split(',').map(v => v.trim().replace(/"/g, ''));
+          const item: any = {};
+          headers.forEach((header, index) => {
+            item[header] = values[index];
+          });
+          return item;
+        });
+
+        if (items.length === 0) {
+          void popupAlert("File CSV kosong atau tidak valid.");
+          return;
+        }
+
+        // Validate and Map to Backend format
+        // Template: Nama, NISN, Gender (L/P), No Telp
+        // Backend needs more, so we use defaults for missing ones
+        const formattedItems = items.map(item => ({
+          name: item['Nama Siswa'] || item['Nama'] || 'Siswa Baru',
+          username: item['NISN'] || `${(item['Nama'] || 'Siswa').replace(/\s+/g, '').toLowerCase().substring(0, 5)}${Date.now().toString().substring(8)}`,
+          password: 'password123',
+          nisn: item['NISN'] || '',
+          nis: item['NISN'] || '',
+          gender: (item['Jenis Kelamin'] || item['Gender'] || 'L').toUpperCase().startsWith('P') ? 'P' : 'L',
+          address: '-',
+          class_id: parseInt(selectedKelas) || (kelasList[0]?.id ? parseInt(kelasList[0].id) : 1),
+          phone: item['No Telp'] || item['Phone'] || null,
+        }));
+
+        setIsSubmitting(true);
+        const { studentService } = await import('../../services/student');
+        const response = await studentService.importStudents(formattedItems);
+        
+        void popupAlert(`Berhasil mengimpor ${response.created} siswa.`);
+        await fetchData();
+      } catch (err: any) {
+        console.error(err);
+        void popupAlert(err?.response?.data?.message || 'Gagal memproses file CSV');
+      } finally {
+        setIsSubmitting(false);
       }
     };
     reader.readAsText(file);

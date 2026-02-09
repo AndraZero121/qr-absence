@@ -13,6 +13,7 @@ import RekapKehadiranSiswa from "./RekapKehadiranSiswa";
 import DaftarKetidakhadiran from "./DaftarKetidakhadiran";
 import { usePopup } from "../../component/Shared/Popup/PopupProvider";
 import { dashboardService } from "../../services/dashboard";
+import { STORAGE_BASE_URL } from "../../utils/constants";
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -111,44 +112,128 @@ const COLORS = {
   SAKIT: "#520C8F",      // UNGU - Sakit
 };
 
+import { Construction } from "lucide-react";
+import type { WakaSummary } from "../../types/api";
+
+// ... (existing imports)
+
 export default function DashboardStaff({ user, onLogout }: DashboardStaffProps) {
   const { confirm: popupConfirm } = usePopup();
-  /* eslint-disable @typescript-eslint/no-unused-vars */
+   
   const [currentPage, setCurrentPage] = useState<WakaPage>("dashboard");
   const navigate = useNavigate();
 
   // API data states
-  const [wakaSummary, setWakaSummary] = useState<any>(null);
+  const [wakaSummary, setWakaSummary] = useState<WakaSummary | null>(null);
+
+  // ... (rest of the component)
+
+function ComingSoon({ title }: { title: string }) {
+  return (
+    <div
+      style={{
+        backgroundColor: "white",
+        borderRadius: "16px",
+        padding: "64px 32px",
+        border: "2px dashed #E5E7EB",
+        textAlign: "center",
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        justifyContent: "center",
+        height: "100%",
+        minHeight: "400px"
+      }}
+    >
+      <div style={{ 
+        backgroundColor: "#F3F4F6", 
+        padding: "24px", 
+        borderRadius: "50%", 
+        marginBottom: "24px",
+        display: "inline-flex"
+      }}>
+        <Construction size={48} color="#9CA3AF" />
+      </div>
+      <h2
+        style={{
+          fontSize: "24px",
+          marginBottom: "12px",
+          color: "#111827",
+          fontWeight: 700,
+        }}
+      >
+        {title} Segera Hadir
+      </h2>
+      <p style={{ color: "#6B7280", fontSize: "16px", maxWidth: "400px", lineHeight: "1.5" }}>
+        Fitur ini sedang dalam tahap pengembangan dan akan segera tersedia dalam pembaruan berikutnya.
+      </p>
+    </div>
+  );
+}
 
   // Fetch dashboard data
   useEffect(() => {
+    const controller = new AbortController();
+    
     const fetchDashboardData = async () => {
       try {
-        const [wakaStats] = await Promise.all([
-          dashboardService.getWakaDashboardSummary(),
-        ]);
+        const wakaStats = await dashboardService.getWakaDashboardSummary({ signal: controller.signal });
         setWakaSummary(wakaStats);
-      } catch (error) {
-        console.error('Error fetching dashboard data:', error);
+      } catch (error: any) {
+        if (error.name !== 'AbortError') {
+          console.error('Error fetching dashboard data:', error);
+        }
       }
     };
     fetchDashboardData();
     // Refresh every minute
     const interval = setInterval(fetchDashboardData, 60000);
-    return () => clearInterval(interval);
+    return () => {
+      controller.abort();
+      clearInterval(interval);
+    };
   }, []);
 
   const [selectedGuru, setSelectedGuru] = useState<string | null>(null);
+  const [selectedGuruIdentitas, setSelectedGuruIdentitas] = useState<string | null>(null);
   const [selectedKelas, setSelectedKelas] = useState<string | null>(null);
   const [selectedKelasId, setSelectedKelasId] = useState<string | null>(null);
+  const [selectedJadwalImage, setSelectedJadwalImage] = useState<string | null>(null);
   const [selectedKelasInfo, setSelectedKelasInfo] = useState<{
     namaKelas: string;
     waliKelas: string;
   } | null>(null);
+  
   const [selectedSiswa, setSelectedSiswa] = useState<{
     name: string;
     identitas: string;
   } | null>(null);
+
+  const handleMenuClick = (page: string, payload?: any) => {
+    setCurrentPage(page as WakaPage);
+
+    // Handle payload untuk lihat-kelas
+    if (page === "lihat-kelas" && payload) {
+      setSelectedKelas(payload.kelas);
+      setSelectedKelasId(payload.classId);
+      setSelectedJadwalImage(payload.jadwalImage);
+    }
+
+    // Handle payload untuk lihat-guru
+    if (page === "lihat-guru" && payload) {
+      setSelectedGuru(payload.namaGuru);
+      setSelectedGuruIdentitas(payload.noIdentitas);
+      setSelectedJadwalImage(payload.jadwalImage);
+    }
+
+    // Handle payload untuk daftar-ketidakhadiran
+    if (page === "daftar-ketidakhadiran" && payload) {
+      setSelectedSiswa({
+        name: payload.siswaName,
+        identitas: payload.siswaIdentitas,
+      });
+    }
+  };
 
   const [currentDate, setCurrentDate] = useState("");
   const [currentTime, setCurrentTime] = useState("");
@@ -176,18 +261,6 @@ export default function DashboardStaff({ user, onLogout }: DashboardStaffProps) 
     const interval = setInterval(updateDateTime, 1000);
     return () => clearInterval(interval);
   }, []);
-
-  const handleMenuClick = (page: string, payload?: any) => {
-    setCurrentPage(page as WakaPage);
-
-    // Handle payload untuk daftar-ketidakhadiran
-    if (page === "daftar-ketidakhadiran" && payload) {
-      setSelectedSiswa({
-        name: payload.siswaName,
-        identitas: payload.siswaIdentitas,
-      });
-    }
-  };
 
   const handleLogout = async () => {
     if (await popupConfirm("Apakah Anda yakin ingin keluar?")) {
@@ -232,6 +305,8 @@ export default function DashboardStaff({ user, onLogout }: DashboardStaffProps) 
           <DetailGuru
             {...commonProps}
             namaGuru={selectedGuru || undefined}
+            noIdentitas={selectedGuruIdentitas || undefined}
+            jadwalImage={selectedJadwalImage ? `${STORAGE_BASE_URL}/${selectedJadwalImage}` : undefined}
             onBack={() => handleMenuClick("jadwal-guru")}
           />
         );
@@ -241,6 +316,7 @@ export default function DashboardStaff({ user, onLogout }: DashboardStaffProps) 
           <DetailKelas
             {...commonProps}
             kelas={selectedKelas || undefined}
+            jadwalImage={selectedJadwalImage ? `${STORAGE_BASE_URL}/${selectedJadwalImage}` : undefined}
             onBack={() => handleMenuClick("jadwal-kelas")}
           />
         );
@@ -290,6 +366,7 @@ export default function DashboardStaff({ user, onLogout }: DashboardStaffProps) 
             {...commonProps}
             namaKelas={selectedKelasInfo?.namaKelas || "X Mekatronika 1"}
             waliKelas={selectedKelasInfo?.waliKelas || "Ewit Erniyah S.pd"}
+            classId={selectedKelasId || undefined}
             onBack={() => handleMenuClick("detail-siswa-staff")}
           />
         );
@@ -691,30 +768,5 @@ function TimeRange({ label, value }: { label: string; value: string }) {
   );
 }
 
-function ComingSoon({ title }: { title: string }) {
-  return (
-    <div
-      style={{
-        backgroundColor: "white",
-        borderRadius: "12px",
-        padding: "48px 32px",
-        border: "2px dashed #E5E7EB",
-        textAlign: "center",
-      }}
-    >
-      <div style={{ fontSize: "48px", marginBottom: "16px" }}>🚀</div>
-      <h2
-        style={{
-          fontSize: "20px",
-          marginBottom: "8px",
-          color: "#111827",
-          fontWeight: 700,
-        }}
-      >
-        {title}
-      </h2>
-      <p style={{ color: "#6B7280", fontSize: "14px", margin: 0 }}>Konten masih dalam pengembangan.</p>
-    </div>
-  );
-}
+
 

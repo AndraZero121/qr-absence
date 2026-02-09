@@ -11,11 +11,28 @@ import {
   FaCheckCircle,
   FaTimesCircle,
   FaInfoCircle,
-  FaExclamationTriangle
+  FaExclamationTriangle,
+  FaProcedures
 } from "react-icons/fa";
 import { useNavigate } from "react-router-dom";
 import PageWrapper from "../../components/ui/PageWrapper";
 import apiClient from "../../services/api";
+
+const getStatusBadge = (status) => {
+  const statusMapping = {
+    present: { label: 'Hadir', class: 'bg-emerald-100 text-emerald-700 border-emerald-200', icon: <FaCheckCircle /> },
+    late: { label: 'Terlambat', class: 'bg-amber-100 text-amber-700 border-amber-200', icon: <FaExclamationTriangle /> },
+    absent: { label: 'Belum Absen', class: 'bg-gray-100 text-gray-400 border-gray-200', icon: <FaSpinner /> },
+    excused: { label: 'Izin', class: 'bg-blue-100 text-blue-700 border-blue-200', icon: <FaInfoCircle /> },
+    sick: { label: 'Sakit', class: 'bg-violet-100 text-violet-700 border-violet-200', icon: <FaProcedures /> },
+  };
+  const config = statusMapping[status] || statusMapping.absent;
+  return (
+    <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest border ${config.class}`}>
+      {config.icon} {config.label}
+    </span>
+  );
+};
 
 export default function KehadiranGuruIndex() {
   const navigate = useNavigate();
@@ -24,7 +41,7 @@ export default function KehadiranGuruIndex() {
   const [loading, setLoading] = useState(true);
   const [teacherAttendance, setTeacherAttendance] = useState([]);
 
-  const fetchAttendance = async () => {
+  const fetchAttendance = React.useCallback(async () => {
     try {
       setLoading(true);
       const res = await apiClient.get('/attendance/teachers/daily', { params: { date } });
@@ -35,32 +52,18 @@ export default function KehadiranGuruIndex() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [date]);
 
   useEffect(() => {
     fetchAttendance();
-  }, [date]);
+  }, [fetchAttendance]);
 
   const filteredTeachers = teacherAttendance.filter(item => 
     item.teacher?.user?.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
     item.teacher?.nip?.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  const getStatusBadge = (status) => {
-    const configs = {
-      present: { label: 'Hadir', class: 'bg-emerald-100 text-emerald-700 border-emerald-200', icon: <FaCheckCircle /> },
-      late: { label: 'Terlambat', class: 'bg-amber-100 text-amber-700 border-amber-200', icon: <FaExclamationTriangle /> },
-      absent: { label: 'Belum Absen', class: 'bg-gray-100 text-gray-400 border-gray-200', icon: <FaSpinner /> },
-      excused: { label: 'Izin', class: 'bg-blue-100 text-blue-700 border-blue-200', icon: <FaInfoCircle /> },
-      sick: { label: 'Sakit', class: 'bg-violet-100 text-violet-700 border-violet-200', icon: <FaProcedures /> },
-    };
-    const config = configs[status] || configs.absent;
-    return (
-      <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest border ${config.class}`}>
-        {config.icon} {config.label}
-      </span>
-    );
-  };
+
 
   return (
     <PageWrapper className="max-w-[1600px] mx-auto p-6 md:p-10 space-y-10 font-sans">

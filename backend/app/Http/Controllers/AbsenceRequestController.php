@@ -32,15 +32,9 @@ class AbsenceRequestController extends Controller
         return response()->json($query->latest()->paginate());
     }
 
-    public function store(Request $request): JsonResponse
+    public function store(\App\Http\Requests\StoreAbsenceRequest $request): JsonResponse
     {
-        $data = $request->validate([
-            'student_id' => ['nullable', 'exists:student_profiles,id'],
-            'type' => ['required', 'in:dispensation,sick,permit'],
-            'start_date' => ['required', 'date'],
-            'end_date' => ['required', 'date', 'after_or_equal:start_date'],
-            'reason' => ['nullable', 'string'],
-        ]);
+        $data = $request->validated();
 
         $user = $request->user();
 
@@ -83,19 +77,14 @@ class AbsenceRequestController extends Controller
         $student = StudentProfile::with('classRoom')->findOrFail($data['student_id']);
 
         if ($user->user_type === 'student') {
-            // Students can only request for themselves? 
-            // Or only class officers? The existing logic was:
-            if (! optional($user->studentProfile)->is_class_officer) {
-                // Check if requesting for self? 
-                if ($user->studentProfile->id !== $student->id) {
-                     abort(403, 'Pengurus kelas saja yang boleh mengajukan untuk orang lain');
-                }
-                // If requesting for self, is it allowed? The original code said "Pengurus kelas saja".
-                // I will keep original restriction: Only Class Officer can request? 
-                // Or maybe the user meant "Siswa biasa bisa request untuk diri sendiri"? 
-                // "Gap: Pengajuan dispensasi/izin sakit oleh guru/wali/pengurus kelas" - TODO Checklist says this.
-                // It doesn't say "Siswa". So I'll keep the Class Officer check strictly for now, or assume Class Officer submits for students.
-                abort(403, 'Pengurus kelas saja yang boleh mengajukan');
+            $studentProfile = $user->studentProfile;
+
+            if (! $studentProfile) {
+                abort(403, 'Profil siswa tidak ditemukan');
+            }
+
+            if (! $studentProfile->is_class_officer && $studentProfile->id !== $student->id) {
+                abort(403, 'Pengurus kelas saja yang boleh mengajukan untuk orang lain');
             }
         }
 
@@ -141,7 +130,7 @@ class AbsenceRequestController extends Controller
         ]);
 
         AbsenceRequestCreated::dispatch($absenceRequest);
-        
+
         if ($absenceRequest->student_id) {
             \App\Jobs\NotifyTeacherNewAbsence::dispatch($absenceRequest);
         }

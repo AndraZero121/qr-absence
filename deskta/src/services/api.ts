@@ -35,8 +35,8 @@ apiClient.interceptors.response.use(
         // Handle 401 Unauthorized - redirect to login
         if (error.response?.status === 401) {
             localStorage.removeItem(TOKEN_KEY);
-            localStorage.removeItem('currentUser');
-            localStorage.removeItem('selectedRole');
+            localStorage.removeItem('user_role');
+            localStorage.removeItem('user_data');
 
             // Only redirect if not already on login page
             if (!window.location.pathname.includes('/login') && window.location.pathname !== '/') {

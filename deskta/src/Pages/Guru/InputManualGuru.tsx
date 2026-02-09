@@ -2,7 +2,7 @@
 import GuruLayout from '../../component/Guru/GuruLayout.tsx';
 import CalendarIcon from '../../assets/Icon/calender.png';
 import { Modal } from '../../component/Shared/Modal';
-import { usePopup } from "../../component/Shared/Popup/PopupProvider";
+
 
 interface InputManualGuruProps {
   user: { name: string; role: string };
@@ -11,7 +11,7 @@ interface InputManualGuruProps {
   onMenuClick: (page: string) => void;
 }
 
-import { STATUS_BACKEND_TO_FRONTEND, STATUS_COLORS_HEX, STATUS_FRONTEND_TO_BACKEND } from '../../utils/statusMapping';
+import { STATUS_BACKEND_TO_FRONTEND, STATUS_COLORS_HEX } from '../../utils/statusMapping';
 
 interface Siswa {
   id: string;
@@ -85,11 +85,11 @@ export default function InputManualGuru({
   currentPage,
   onMenuClick,
 }: InputManualGuruProps) {
-  const { alert: popupAlert } = usePopup();
+
   // State for Schedule & Students
   const [selectedKelas, setSelectedKelas] = useState('Memuat...');
   const [selectedMapel, setSelectedMapel] = useState('Memuat...');
-  const [activeScheduleId, setActiveScheduleId] = useState<string | null>(null);
+
 
   const [currentDate, setCurrentDate] = useState(() => {
     const d = new Date();
@@ -108,7 +108,7 @@ export default function InputManualGuru({
 
         if (schedules.length > 0) {
           const schedule = schedules[0];
-          setActiveScheduleId(schedule.id.toString());
+          // setActiveScheduleId(schedule.id.toString());
           setSelectedKelas(schedule.class?.name || 'Kelas');
           setSelectedMapel(schedule.subject_name || schedule.title || 'Mapel');
 
@@ -799,7 +799,7 @@ export default function InputManualGuru({
                     e.currentTarget.style.opacity = "1";
                   }}
                 >
-                  {editStatus === 'hadir' ? 'Simpan Keterangan' : 'Simpan Perubahan'}
+                  {editStatus === 'present' ? 'Simpan Keterangan' : 'Simpan Perubahan'}
                 </button>
               </div>
             </div>

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+  import React, { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { FaUser, FaLock, FaEye, FaEyeSlash, FaArrowLeft, FaIdCard } from 'react-icons/fa';
 import PageWrapper from '../../components/ui/PageWrapper';
@@ -41,13 +41,14 @@ const LoginPage = () => {
       ],
       dashboard: '/waka/dashboard'
     },
-    'peserta-didik': {
+    'siswa': {
       title: 'Peserta Didik',
       color: 'text-cyan-600',
       bgColor: 'bg-cyan-600',
       gradient: 'from-cyan-50 to-cyan-100',
       fields: [
-        { name: 'identifier', label: 'NISN', placeholder: 'Masukkan NISN', type: 'text', icon: <FaIdCard /> }
+        { name: 'identifier', label: 'NIS / NISN', placeholder: 'Masukkan NIS atau NISN', type: 'text', icon: <FaIdCard />, required: true },
+        { name: 'password', label: 'Kata Sandi (Opsional)', placeholder: 'Kosongkan jika login dengan NISN', type: 'password', icon: <FaLock />, required: false }
       ],
       dashboard: '/siswa/dashboard'
     },
@@ -62,7 +63,7 @@ const LoginPage = () => {
       ],
       dashboard: '/guru/dashboard'
     },
-    'wali-kelas': {
+    'wakel': {
       title: 'Wali Kelas',
       color: 'text-green-600',
       bgColor: 'bg-green-600',
@@ -73,13 +74,14 @@ const LoginPage = () => {
       ],
       dashboard: '/walikelas/dashboard'
     },
-    'pengurus-kelas': {
+    'pengurus_kelas': {
       title: 'Pengurus Kelas',
       color: 'text-orange-600',
       bgColor: 'bg-orange-600',
       gradient: 'from-orange-50 to-orange-100',
       fields: [
-        { name: 'identifier', label: 'NISN', placeholder: 'Masukkan NISN', type: 'text', icon: <FaIdCard /> }
+        { name: 'identifier', label: 'NIS / NISN', placeholder: 'Masukkan NIS atau NISN', type: 'text', icon: <FaIdCard />, required: true },
+        { name: 'password', label: 'Kata Sandi (Opsional)', placeholder: 'Kosongkan jika login dengan NISN', type: 'password', icon: <FaLock />, required: false }
       ],
       dashboard: '/pengurus-kelas/dashboard'
     }
@@ -89,11 +91,20 @@ const LoginPage = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setError('');
+    setError(''); 
     setLoading(true);
 
-    const emptyFields = config.fields.filter(field => !formData[field.name]);
-    if (emptyFields.length > 0) {
+    // For students/pengurus_kelas: NISN login doesn't require password
+    const isNisnLogin = (role === 'siswa' || role === 'pengurus_kelas') && 
+                        formData.identifier && 
+                        !formData.password;
+    
+    const emptyFields = config.fields.filter(field => {
+      if (isNisnLogin && field.name === 'password') return false; // Skip password check for NISN login
+      return !formData[field.name];
+    });
+    
+    if (emptyFields.length > 0 && !isNisnLogin) {
       setError('Mohon isi semua kolom yang tersedia.');
       setLoading(false);
       return;
@@ -108,14 +119,14 @@ const LoginPage = () => {
         formData.password || '' 
       );
 
-      console.log('Login berhasil sebagai', role, user);
+      console.log('Login berhasil sebagai', user.role, user);
 
-      localStorage.setItem('userRole', role);
-      localStorage.setItem('userIdentifier', formData.identifier);
-      localStorage.setItem('userName', user.name);
-      localStorage.setItem('userData', JSON.stringify(user));
+      localStorage.setItem('user_role', user.role);
+      localStorage.setItem('user_data', JSON.stringify(user));
 
-      navigate(config.dashboard);
+      // Use the actual dashboard based on returned user role
+      const actualDashboard = roleConfig[user.role]?.dashboard || config.dashboard;
+      navigate(actualDashboard);
     } catch (error) {
       console.error('Login error:', error);
       if (error.response?.status === 422) {
@@ -125,12 +136,10 @@ const LoginPage = () => {
       } else {
         // Fallback for demo/development if service fails
         // Remove this block in production and handle error properly
-        if (process.env.NODE_ENV !== 'production' && !error.response) {
+        if (import.meta.env.DEV && !error.response) {
             console.warn("Dev mode: Bypass login for testing UI");
-            localStorage.setItem('userRole', role);
-            localStorage.setItem('userIdentifier', formData.identifier);
-            localStorage.setItem('userName', 'Test User');
-            localStorage.setItem('userData', JSON.stringify({ name: 'Test User', role: role }));
+            localStorage.setItem('user_role', role);
+            localStorage.setItem('user_data', JSON.stringify({ name: 'Test User', role: role }));
             navigate(config.dashboard);
             return;
         }
@@ -176,6 +185,13 @@ const LoginPage = () => {
                 </div>
               )}
 
+              {/* Info for NISN Login */}
+              {(role === 'siswa' || role === 'pengurus_kelas') && (
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-sm text-blue-700">
+                  <span className="font-semibold">💡 Tips:</span> Masukkan NISN saja dan kosongkan password untuk login cepat!
+                </div>
+              )}
+
               {config.fields.map((field, index) => (
                 <div key={index} className="space-y-1.5">
                   <label className="text-sm font-semibold text-gray-700 ml-1 block">
@@ -191,7 +207,7 @@ const LoginPage = () => {
                       value={formData[field.name]}
                       onChange={(e) => handleInputChange(field.name, e.target.value)}
                       className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all bg-gray-50 focus:bg-white text-gray-800 placeholder-gray-400 text-sm"
-                      required
+                      required={field.required !== false}
                     />
                     
                     {field.type === 'password' && (

@@ -140,21 +140,9 @@ class ScheduleController extends Controller
         ]);
     }
 
-    public function store(Request $request): JsonResponse
+    public function store(\App\Http\Requests\StoreScheduleRequest $request): JsonResponse
     {
-        $data = $request->validate([
-            'day' => ['required', 'string'],
-            'start_time' => ['required', 'date_format:H:i'],
-            'end_time' => ['required', 'date_format:H:i', 'after:start_time'],
-            'title' => ['nullable', 'string', 'max:255'],
-            'subject_name' => ['nullable', 'string', 'max:255'],
-            'subject_id' => ['nullable', 'exists:subjects,id'],
-            'teacher_id' => ['required', 'exists:teacher_profiles,id'],
-            'class_id' => ['required', 'exists:classes,id'],
-            'room' => ['nullable', 'string', 'max:50'],
-            'semester' => ['required', 'integer'],
-            'year' => ['required', 'integer'],
-        ]);
+        $data = $request->validated();
 
         if (isset($data['subject_id']) && ! isset($data['subject_name'])) {
             $subject = Subject::find($data['subject_id']);
@@ -179,21 +167,9 @@ class ScheduleController extends Controller
         return response()->json($schedule->load(['teacher.user:id,name', 'class:id,grade,label', 'qrcodes', 'attendances']));
     }
 
-    public function update(Request $request, Schedule $schedule): JsonResponse
+    public function update(\App\Http\Requests\UpdateScheduleRequest $request, Schedule $schedule): JsonResponse
     {
-        $data = $request->validate([
-            'day' => ['sometimes', 'string'],
-            'start_time' => ['sometimes', 'date_format:H:i'],
-            'end_time' => ['sometimes', 'date_format:H:i', 'after:start_time'],
-            'title' => ['nullable', 'string', 'max:255'],
-            'subject_name' => ['nullable', 'string', 'max:255'],
-            'subject_id' => ['nullable', 'exists:subjects,id'],
-            'teacher_id' => ['sometimes', 'exists:teacher_profiles,id'],
-            'class_id' => ['sometimes', 'exists:classes,id'],
-            'room' => ['nullable', 'string', 'max:50'],
-            'semester' => ['sometimes', 'integer'],
-            'year' => ['sometimes', 'integer'],
-        ]);
+        $data = $request->validated();
 
         if (isset($data['subject_id']) && ! isset($data['subject_name'])) {
             $subject = Subject::find($data['subject_id']);
@@ -226,6 +202,12 @@ class ScheduleController extends Controller
         ]);
 
         $day = $this->normalizeDay($dto->day);
+
+        if ($day === 'Sunday') {
+            throw ValidationException::withMessages([
+                'day' => ['Kegiatan sekolah tidak tersedia di hari Minggu.'],
+            ]);
+        }
 
         foreach ($dto->items as $index => $item) {
             $start = Carbon::createFromFormat('H:i', $item['start_time']);
@@ -312,6 +294,8 @@ class ScheduleController extends Controller
             'kamis' => 'Thursday',
             'jumat' => 'Friday',
             'jum\'at' => 'Friday',
+            'sabtu' => 'Saturday',
+            'minggu' => 'Sunday',
         ];
 
         $lower = strtolower($day);

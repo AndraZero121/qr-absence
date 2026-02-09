@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef } from 'react';
 import { 
   FaUserGraduate, 
   FaSearch, 
@@ -12,8 +12,6 @@ import {
   FaFilter
 } from 'react-icons/fa';
 import * as XLSX from 'xlsx';
-import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable';
 import TambahSiswa from '../../components/Admin/TambahSiswa';
 import PageWrapper from '../../components/ui/PageWrapper';
 
@@ -31,7 +29,6 @@ function DataSiswa() {
   const [filterKelas, setFilterKelas] = useState('');
   
   const fileInputRef = useRef(null);
-  const exportButtonRef = useRef(null);
 
   const handleAddOrUpdate = (formData) => {
     if (editData) {
@@ -56,6 +53,8 @@ function DataSiswa() {
     XLSX.writeFile(workbook, `Data_Siswa.xlsx`);
     setShowExportMenu(false);
   };
+
+  /* handleExportToPDF removed */
 
   const filteredStudents = students.filter(s => 
     s.nama.toLowerCase().includes(searchTerm.toLowerCase()) &&
@@ -91,9 +90,7 @@ function DataSiswa() {
                         <button onClick={handleExportToExcel} className="w-full text-left px-6 py-4 hover:bg-gray-50 rounded-2xl transition-colors font-bold text-gray-700 flex items-center gap-3 text-sm">
                             <span className="text-emerald-500"><FaFileExport /></span> Excel (.xlsx)
                         </button>
-                        <button className="w-full text-left px-6 py-4 hover:bg-gray-50 rounded-2xl transition-colors font-bold text-gray-700 flex items-center gap-3 text-sm border-t border-gray-50">
-                            <span className="text-red-500"><FaFileExport /></span> PDF (.pdf)
-                        </button>
+                        {/* PDF Export removed */}
                     </div>
                 )}
             </div>

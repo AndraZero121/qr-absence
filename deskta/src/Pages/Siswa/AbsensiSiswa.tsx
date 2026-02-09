@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from "react";
-import SiswaLayout from "../../component/Siswa/SiswaLayout";
+import SiswaLayout, { type MenuKey } from "../../component/Siswa/SiswaLayout";
 import { Select } from "../../component/Shared/Select";
 import { Modal } from "../../component/Shared/Modal";
 
@@ -122,7 +122,7 @@ function XIcon({ size = 24 }: { size?: number }) {
 // Interface untuk props
 interface AbsensiSiswaProps {
   user?: { name: string; phone: string; role?: string };
-  currentPage?: string;
+  currentPage?: MenuKey;
   onMenuClick?: (page: string) => void;
   onLogout?: () => void;
 }
@@ -221,7 +221,7 @@ export default function AbsensiSiswa({
   const StatusButton = ({ status, row }: { status: string; row: AbsensiRecord }) => {
     let bgColor = "#D90000"; // REVISI: Tidak Hadir > #D90000
     let label = "Tidak Hadir";
-    let textColor = "#FFFFFF";
+    const textColor = "#FFFFFF";
 
 
     // Actually STATUS_COLORS_HEX keys are 'present', 'sick' etc.
@@ -396,7 +396,7 @@ export default function AbsensiSiswa({
     <>
       <SiswaLayout
         pageTitle="Daftar Ketidakhadiran"
-        currentPage={currentPage as any}
+        currentPage={currentPage}
         onMenuClick={onMenuClick}
         user={user}
         onLogout={onLogout}

@@ -10,11 +10,11 @@ use App\Models\Schedule;
 use App\Models\StudentProfile;
 use App\Models\TeacherProfile;
 use App\Services\WhatsAppService;
-use App\Services\WhatsAppTemplates;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Symfony\Component\HttpFoundation\StreamedResponse;
@@ -61,7 +61,7 @@ class AttendanceController extends Controller
         }
 
         if ($user->user_type === 'student') {
-            if (! $data['device_id'] ?? null) {
+            if (! ($data['device_id'] ?? null)) {
                 return response()->json(['message' => 'Device belum terdaftar'], 422);
             }
 
@@ -88,35 +88,41 @@ class AttendanceController extends Controller
             'teacher_id' => $user->teacherProfile->id ?? null,
         ];
 
-        $existing = Attendance::where($attributes)->first();
-        if ($existing) {
-            return response()->json([
-                'message' => 'Presensi sudah tercatat',
-                'attendance' => $existing->load(['student.user:id,name', 'teacher.user:id,name', 'schedule:id,class_id,teacher_id,subject_name,date,start_time,end_time,room']),
+        return DB::transaction(function () use ($attributes, $now, $qr, $user) {
+            $existing = Attendance::where($attributes)
+                ->whereDate('date', $now->toDateString())
+                ->lockForUpdate()
+                ->first();
+
+            if ($existing) {
+                return response()->json([
+                    'message' => 'Presensi sudah tercatat',
+                    'attendance' => new \App\Http\Resources\AttendanceResource($existing->load(['student.user', 'teacher.user', 'schedule.class'])),
+                ]);
+            }
+
+            $attendance = Attendance::create([
+                ...$attributes,
+                'date' => $now,
+                'qrcode_id' => $qr->id,
+                'status' => $this->determineStatus($qr->schedule, $now), // Use strict status check
+                'checked_in_at' => $now,
+                'source' => 'qrcode',
             ]);
-        }
 
-        $attendance = Attendance::create([
-            ...$attributes,
-            'date' => $now,
-            'qrcode_id' => $qr->id,
-            'status' => $this->determineStatus($qr->schedule, $now), // Use strict status check
-            'checked_in_at' => $now,
-            'source' => 'qrcode',
-        ]);
+            // dispatch event after creation to ensure ID is available
+            AttendanceRecorded::dispatch($attendance);
 
-        // dispatch event after creation to ensure ID is available
-        AttendanceRecorded::dispatch($attendance);
+            Log::info('attendance.recorded', [
+                'attendance_id' => $attendance->id,
+                'schedule_id' => $attendance->schedule_id,
+                'user_id' => $user->id,
+                'attendee_type' => $attendance->attendee_type,
+                'status' => $attendance->status,
+            ]);
 
-        Log::info('attendance.recorded', [
-            'attendance_id' => $attendance->id,
-            'schedule_id' => $attendance->schedule_id,
-            'user_id' => $user->id,
-            'attendee_type' => $attendance->attendee_type,
-            'status' => $attendance->status
-        ]);
-
-        return response()->json($attendance->load(['student.user:id,name', 'teacher.user:id,name', 'schedule:id,class_id,teacher_id,subject_name,date,start_time,end_time,room']));
+            return response()->json(new \App\Http\Resources\AttendanceResource($attendance->loadMissing(['student.user', 'teacher.user', 'schedule.class'])));
+        });
     }
 
     /**
@@ -124,14 +130,16 @@ class AttendanceController extends Controller
      */
     private function determineStatus($schedule, $checkInTime): string
     {
-        if (!$schedule || !$schedule->start_time) return 'present';
+        if (! $schedule || ! $schedule->start_time) {
+            return 'present';
+        }
 
         $startTime = Carbon::parse($schedule->start_time);
-        
+
         // Use today's date combined with schedule time for comparison
         $scheduledDateTime = Carbon::createFromTime(
-            $startTime->hour, 
-            $startTime->minute, 
+            $startTime->hour,
+            $startTime->minute,
             $startTime->second
         );
 
@@ -171,7 +179,7 @@ class AttendanceController extends Controller
         $now = now();
 
         foreach ($students as $student) {
-            if (!in_array($student->id, $existingStudentIds)) {
+            if (! in_array($student->id, $existingStudentIds)) {
                 Attendance::create([
                     'attendee_type' => 'student',
                     'student_id' => $student->id,
@@ -179,7 +187,7 @@ class AttendanceController extends Controller
                     'date' => $now,
                     'status' => 'absent', // Alpha
                     'source' => 'system_close', // Mark as system generated
-                    'reason' => 'Tidak melakukan scan presensi'
+                    'reason' => 'Tidak melakukan scan presensi',
                 ]);
                 $absentCount++;
             }
@@ -187,7 +195,7 @@ class AttendanceController extends Controller
 
         return response()->json([
             'message' => "Absensi ditutup. {$absentCount} siswa ditandai Alpha.",
-            'absent_count' => $absentCount
+            'absent_count' => $absentCount,
         ]);
     }
 
@@ -218,7 +226,7 @@ class AttendanceController extends Controller
 
         $attendances = $query->latest('date')->paginate();
 
-        return response()->json($attendances);
+        return \App\Http\Resources\AttendanceResource::collection($attendances)->response();
     }
 
     public function summaryMe(Request $request): JsonResponse
@@ -292,7 +300,7 @@ class AttendanceController extends Controller
             $query->where('status', $request->string('status'));
         }
 
-        return response()->json($query->latest('date')->paginate());
+        return \App\Http\Resources\AttendanceResource::collection($query->latest('date')->paginate())->response();
     }
 
     public function summaryTeaching(Request $request): JsonResponse
@@ -596,7 +604,7 @@ class AttendanceController extends Controller
         ]);
 
         $query = Attendance::query()
-            ->with(['student.user:id,name', 'schedule:id,title,subject_name'])
+            ->with(['student.user:id,name', 'schedule:id,title,subject_name', 'attachments'])
             ->where('attendee_type', 'student')
             ->whereHas('schedule', function ($q) use ($class): void {
                 $q->where('class_id', $class->id);
@@ -738,51 +746,22 @@ class AttendanceController extends Controller
         ]);
     }
 
-    public function manual(Request $request): JsonResponse
+    public function manual(\App\Http\Requests\StoreManualAttendanceRequest $request): JsonResponse
     {
+        // Data already validated and normalized in Form Request
         $dto = \App\Data\ManualAttendanceData::fromRequest($request);
-        
-        // Input Normalization/Mapping for Frontend Compatibility
-        $input = $request->all();
-        if (isset($input['status'])) {
-            $map = [
-                'alpha' => 'absent',
-                'tanpa-keterangan' => 'absent',
-                'pulang' => 'excused', // Changed from izin to excused
-                'hadir' => 'present',
-                'sakit' => 'sick',
-                'izin' => 'excused', // Changed from izin to excused
-                'terlambat' => 'late',
-            ];
-            if (isset($map[$input['status']])) {
-                $input['status'] = $map[$input['status']];
-                $request->merge(['status' => $input['status']]);
-                // Update DTO manually since it was already created
-                $dto->status = $input['status'];
-            }
-        }
-
-        $request->validate([
-            'attendee_type' => ['required', 'in:student,teacher'],
-            'student_id' => ['nullable', 'exists:student_profiles,id'],
-            'teacher_id' => ['nullable', 'exists:teacher_profiles,id'],
-            'schedule_id' => ['required', 'exists:schedules,id'],
-            'status' => ['required', 'in:present,late,excused,sick,absent,dinas,izin'],
-            'date' => ['required', 'date'],
-            'reason' => ['nullable', 'string'],
-        ]);
 
         // Authorization Check
         $user = $request->user();
         if ($user->user_type === 'teacher') {
             $schedule = Schedule::find($dto->schedule_id);
-            if (!$schedule || $schedule->teacher_id !== $user->teacherProfile->id) {
-                 // Allow if homeroom teacher?
-                 $student = StudentProfile::find($dto->student_id);
-                 $homeroomId = $user->teacherProfile->homeroom_class_id;
-                 if (!$student || $student->class_id !== $homeroomId) {
-                     abort(403, 'Anda tidak memiliki akses untuk mengubah absensi ini.');
-                 }
+            if (! $schedule || $schedule->teacher_id !== $user->teacherProfile->id) {
+                // Allow if homeroom teacher?
+                $student = StudentProfile::find($dto->student_id);
+                $homeroomId = $user->teacherProfile->homeroom_class_id;
+                if (! $student || $student->class_id !== $homeroomId) {
+                    abort(403, 'Anda tidak memiliki akses untuk mengubah absensi ini.');
+                }
             }
         }
 
@@ -812,7 +791,7 @@ class AttendanceController extends Controller
                 'source' => 'manual',
             ]);
 
-            return response()->json($existing->load(['student.user:id,name', 'teacher.user:id,name', 'schedule:id,class_id,teacher_id,subject_name']));
+            return response()->json(new \App\Http\Resources\AttendanceResource($existing->load(['student.user', 'teacher.user', 'schedule.class'])));
         }
 
         $attendance = Attendance::create([
@@ -824,7 +803,7 @@ class AttendanceController extends Controller
             'source' => 'manual',
         ]);
 
-        return response()->json($attendance->load(['student.user:id,name', 'teacher.user:id,name', 'schedule:id,class_id,teacher_id,subject_name']), 201);
+        return response()->json(new \App\Http\Resources\AttendanceResource($attendance->load(['student.user', 'teacher.user', 'schedule.class'])), 201);
     }
 
     public function wakaSummary(Request $request): JsonResponse
@@ -995,6 +974,29 @@ class AttendanceController extends Controller
 
     public function getDocument(Request $request, Attendance $attendance): JsonResponse
     {
+        $user = $request->user();
+
+        // 🛡️ IDOR Protection
+        $isAuthorized = false;
+
+        if ($user->user_type === 'admin') {
+            $isAuthorized = true;
+        } elseif ($user->user_type === 'teacher') {
+            $teacherProfile = $user->teacherProfile;
+            if ($teacherProfile) {
+                // Authorized if they are the teacher for the schedule OR if they are the homeroom teacher for the student
+                $isAuthorized = ($attendance->schedule->teacher_id == $teacherProfile->id) ||
+                                ($attendance->student && $attendance->student->class_id == $teacherProfile->homeroom_class_id);
+            }
+        } elseif ($user->user_type === 'student') {
+            // Authorized only if it's their own attendance
+            $isAuthorized = ($attendance->student_id == $user->studentProfile?->id);
+        }
+
+        if (! $isAuthorized) {
+            abort(403, 'Unauthorized access to document');
+        }
+
         $attachment = $attendance->attachments()->latest()->first();
 
         if (! $attachment) {
@@ -1007,6 +1009,37 @@ class AttendanceController extends Controller
             'mime_type' => $attachment->mime_type,
             'original_name' => $attachment->original_name,
         ]);
+    }
+
+    public function proxyDocument(Request $request, string $path): \Symfony\Component\HttpFoundation\BinaryFileResponse
+    {
+        $attachment = \App\Models\AttendanceAttachment::where('path', $path)->firstOrFail();
+        $attendance = $attachment->attendance;
+        $user = $request->user();
+
+        // 🛡️ IDOR Protection (Same logic as getDocument)
+        $isAuthorized = false;
+        if ($user->user_type === 'admin') {
+            $isAuthorized = true;
+        } elseif ($user->user_type === 'teacher') {
+            $teacherProfile = $user->teacherProfile;
+            if ($teacherProfile) {
+                $isAuthorized = ($attendance->schedule->teacher_id == $teacherProfile->id) ||
+                                ($attendance->student && $attendance->student->class_id == $teacherProfile->homeroom_class_id);
+            }
+        } elseif ($user->user_type === 'student') {
+            $isAuthorized = ($attendance->student_id == $user->studentProfile?->id);
+        }
+
+        if (! $isAuthorized) {
+            abort(403, 'Unauthorized access to document');
+        }
+
+        if (! Storage::exists($path)) {
+            abort(404);
+        }
+
+        return response()->file(Storage::path($path));
     }
 
     protected function storeAttachment(UploadedFile $file): string
@@ -1026,9 +1059,12 @@ class AttendanceController extends Controller
     protected function signedUrl(string $path): string
     {
         try {
+            // Check if disk supports temporary URLs (usually S3)
             return Storage::temporaryUrl($path, now()->addMinutes(10));
         } catch (\Throwable $e) {
-            return Storage::url($path);
+            // Fallback to a secured API proxy route instead of a public URL
+            // This ensures IDOR protection even if temporary URLs aren't supported
+            return route('attendance.document.proxy', ['path' => $path]);
         }
     }
 
@@ -1053,7 +1089,11 @@ class AttendanceController extends Controller
         $perPage = $this->resolvePerPage($request);
         $attendances = $perPage ? $query->paginate($perPage) : $query->get();
 
-        return response()->json($attendances);
+        if ($perPage) {
+            return \App\Http\Resources\AttendanceResource::collection($attendances)->response();
+        }
+
+        return response()->json(\App\Http\Resources\AttendanceResource::collection($attendances));
     }
 
     public function markExcuse(Request $request, Attendance $attendance): JsonResponse
@@ -1064,15 +1104,17 @@ class AttendanceController extends Controller
 
         // Input Normalization
         $status = $request->input('status');
-                    $map = [
-                        'alpha' => 'absent',
-                        'tanpa-keterangan' => 'absent',
-                        'pulang' => 'excused',
-                        'hadir' => 'present',
-                        'sakit' => 'sick',
-                        'izin' => 'excused',
-                        'terlambat' => 'late',
-                    ];        if (isset($map[$status])) {
+        $map = [
+            'alpha' => 'absent',
+            'tanpa-keterangan' => 'absent',
+            'pulang' => 'excused',
+            'hadir' => 'present',
+            'sakit' => 'sick',
+            'izin' => 'excused',
+            'terlambat' => 'late',
+        ];
+
+        if (isset($map[$status])) {
             $request->merge(['status' => $map[$status]]);
         }
 
@@ -1164,7 +1206,7 @@ class AttendanceController extends Controller
             ->where('attendee_type', 'student');
 
         if ($request->filled('class_id')) {
-            $query->whereHas('schedule', fn($q) => $q->where('class_id', $request->class_id));
+            $query->whereHas('schedule', fn ($q) => $q->where('class_id', $request->class_id));
         }
 
         if ($request->filled('date')) {
@@ -1177,6 +1219,7 @@ class AttendanceController extends Controller
         $date = $request->date ?? now()->toDateString();
 
         $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadView('pdf.attendance_report', compact('attendances', 'date'));
+
         return $pdf->download('attendance_report.pdf');
     }
 

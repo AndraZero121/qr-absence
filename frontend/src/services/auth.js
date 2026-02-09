@@ -30,9 +30,10 @@ export const authService = {
         } finally {
             // Always clear local data
             localStorage.removeItem(TOKEN_KEY);
-            localStorage.removeItem('userRole');
-            localStorage.removeItem('userIdentifier');
+            localStorage.removeItem('user_role');
+            localStorage.removeItem('user_data');
         }
+        sessionStorage.clear();
     },
 
     /**

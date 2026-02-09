@@ -24,23 +24,25 @@ Semua password: **password123**
 - Kelas: XII TKJ 1
 
 ### Siswa (Peserta Didik)
-- Username: `siswa1` | Email: siswa1@example.com | NIS: 2024001 | **NISN: (belum ada)**
-- Username: `siswa2` | Email: siswa2@example.com | NIS: 2024002 | **NISN: (belum ada)**
-- Username: `siswa3` | Email: siswa3@example.com | NIS: 2024003 | **NISN: (belum ada)**
+- Username: `siswa1` | Email: siswa1@example.com | NIS: 2024001 | **NISN: 0024001** ⭐
+- Username: `siswa2` | Email: siswa2@example.com | NIS: 2024002 | **NISN: 0024002** ⭐
+- Username: `siswa3` | Email: siswa3@example.com | NIS: 2024003 | **NISN: 0024003** ⭐
 
-**Note:** Siswa bisa login dengan:
-- **Username + Password** (siswa1 + password123)
-- **NISN saja** (tanpa password) - fitur khusus untuk frontend
+**Note:** Siswa bisa login dengan 3 cara:
+1. **NISN saja** (tanpa password) ⭐ *Cara termudah*
+2. **NIS + Password** (2024001 + password123)
+3. **Username + Password** (siswa1 + password123)
 
 ### Pengurus Kelas
 - Username: `pengurus1`
 - Email: pengurus1@example.com
 - NIS: 2024999
-- **NISN: (belum ada)**
+- **NISN: 0024999** ⭐
 
-**Note:** Pengurus kelas bisa login dengan:
-- **Username + Password** (pengurus1 + password123)
-- **NISN saja** (tanpa password) - fitur khusus untuk frontend
+**Note:** Pengurus kelas bisa login dengan 3 cara:
+1. **NISN saja** (tanpa password) ⭐ *Cara termudah*
+2. **NIS + Password** (2024999 + password123)
+3. **Username + Password** (pengurus1 + password123)
 
 ---
 
@@ -92,4 +94,21 @@ http://127.0.0.1:8001
 - Auto-logout jika token invalid (401)
 - Error handling sudah diimplementasi
 
-**Last Updated:** 2026-02-06
+**Last Updated:** 2026-02-10
+
+---
+
+## 🔐 Login NISN Tanpa Password - AKTIF
+
+✅ **Fitur login dengan NISN saja (tanpa password) sudah aktif kembali!**
+
+Cara pakai:
+1. Pilih role "Siswa" atau "Pengurus Kelas"
+2. Masukkan NISN di field login
+3. Biarkan field password kosong
+4. Klik Login
+
+**Keamanan:**
+- Hanya siswa yang bisa login tanpa password
+- Guru, Admin, dan Waka WAJIB menggunakan password
+- Semua login tetap tercatat dan diaudit

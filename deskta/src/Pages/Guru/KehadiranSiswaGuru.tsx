@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useEffect } from 'react';
 import GuruLayout from '../../component/Guru/GuruLayout.tsx';
 import CalendarIcon from '../../assets/Icon/calender.png';
 import EditIcon from '../../assets/Icon/Edit.png';
@@ -18,7 +18,7 @@ interface SiswaData {
   nisn: string;
   nama: string;
   mapel: string;
-  status: 'present' | 'late' | 'excused' | 'sick' | 'absent' | 'dinas' | 'izin' | 'pulang' | null;
+  status: 'present' | 'late' | 'excused' | 'sick' | 'absent' | null;
   keterangan?: string;
   tanggal?: string;
   jamPelajaran?: string;
@@ -43,7 +43,9 @@ export default function KehadiranSiswaGuru({
   const [siswaList, setSiswaList] = useState<SiswaData[]>([]);
   const [activeScheduleId, setActiveScheduleId] = useState<string | null>(null);
 
-  useMemo(() => {
+  useEffect(() => {
+    const controller = new AbortController();
+    
     const fetchData = async () => {
       try {
         const { dashboardService } = await import('../../services/dashboard');
@@ -94,11 +96,15 @@ export default function KehadiranSiswaGuru({
           setSelectedMapel("-");
           setSiswaList([]);
         }
-      } catch (e) {
-        console.error(e);
+      } catch (e: any) {
+        if (e.name !== 'AbortError') {
+          console.error(e);
+        }
       }
     };
     fetchData();
+    
+    return () => controller.abort();
   }, [user.name, currentDate]);
 
   const handleCloseAttendance = async () => {
@@ -107,20 +113,22 @@ export default function KehadiranSiswaGuru({
       return;
     }
 
-    const confirmed = await popupConfirm({
-      title: "Tutup Absensi?",
-      message: "Siswa yang belum absen akan otomatis ditandai sebagai ALPHA (Tidak Hadir). Lanjutkan?",
-      confirmText: "Ya, Tutup Absensi",
-      cancelText: "Batal"
-    });
+    const confirmed = await popupConfirm(
+      "Siswa yang belum absen akan otomatis ditandai sebagai ALPHA (Tidak Hadir). Lanjutkan?",
+      {
+        title: "Tutup Absensi?",
+        confirmText: "Ya, Tutup Absensi",
+        cancelText: "Batal"
+      }
+    );
 
     if (!confirmed) return;
 
     try {
-      const { dashboardService } = await import('../../services/dashboard');
+      const { API_BASE_URL } = await import('../../utils/constants');
       // Retrieve token
       const token = localStorage.getItem('token');
-      const response = await fetch(`http://localhost:8000/api/me/schedules/${activeScheduleId}/close`, {
+      const response = await fetch(`${API_BASE_URL}/api/me/schedules/${activeScheduleId}/close`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -167,28 +175,22 @@ export default function KehadiranSiswaGuru({
   const getStatusText = (status: string, waktuHadir?: string) => {
     switch (status) {
       case "absent":
-      case "alpha":
         return "Siswa tidak hadir tanpa keterangan";
-      case "izin":
       case "excused":
         return "Siswa izin dengan keterangan";
-      case "sakit":
       case "sick":
         return "Siswa sakit dengan surat dokter";
-      case "hadir":
       case "present":
         return waktuHadir ? `Siswa hadir tepat waktu pada ${waktuHadir}` : "Siswa hadir tepat waktu";
       case "late":
         return waktuHadir ? `Siswa terlambat hadir pada ${waktuHadir}` : "Siswa terlambat";
-      case "pulang":
-        return "Siswa pulang lebih awal karena ada kepentingan";
       default:
         return status;
     }
   };
 
   // Custom Status Renderer dengan icon mata untuk SEMUA STATUS
-  const StatusButton = ({ status, siswa }: { status: string; siswa: SiswaData }) => {
+  const StatusButton = ({ status, siswa }: { status: string | null | undefined; siswa: SiswaData }) => {
     if (!status) return <span style={{ color: '#9CA3AF', fontSize: '13px' }}>-</span>;
 
     const color = STATUS_COLORS_HEX[status] || '#6B7280';
@@ -603,7 +605,7 @@ export default function KehadiranSiswaGuru({
                 </label>
                 <div style={{ position: 'relative' }}>
                   <select
-                    value={editingSiswa.status}
+                    value={editingSiswa.status || 'present'}
                     onChange={(e) => setEditingSiswa({ ...editingSiswa, status: e.target.value as SiswaData['status'] })}
                     style={{
                       width: '100%',
@@ -623,11 +625,11 @@ export default function KehadiranSiswaGuru({
                       paddingRight: '2.5rem'
                     }}
                   >
-                    <option value="hadir">Hadir</option>
-                    <option value="izin">Izin</option>
-                    <option value="sakit">Sakit</option>
-                    <option value="alpha">Tidak Hadir</option>
-                    <option value="pulang">Pulang</option>
+                    <option value="present">Hadir</option>
+                    <option value="excused">Izin</option>
+                    <option value="sick">Sakit</option>
+                    <option value="absent">Tidak Hadir</option>
+                    <option value="late">Terlambat</option>
                   </select>
                 </div>
               </div>
@@ -786,7 +788,7 @@ export default function KehadiranSiswaGuru({
               />
 
               {/* Row Waktu Hadir (khusus untuk status hadir) */}
-              {selectedSiswa.status === 'hadir' && selectedSiswa.waktuHadir && (
+              {selectedSiswa.status === 'present' && selectedSiswa.waktuHadir && (
                 <DetailRow
                   label="Waktu Hadir"
                   value={selectedSiswa.waktuHadir}
@@ -803,47 +805,48 @@ export default function KehadiranSiswaGuru({
                 borderBottom: '1px solid #E5E7EB',
               }}>
                 <div style={{ fontWeight: 600, color: '#374151', display: 'flex', alignItems: 'center', gap: 8 }}>
-                  {selectedSiswa.status === 'hadir' && <CheckIcon size={18} color="#1FA83D" />}
+                  {selectedSiswa.status === 'present' && <CheckIcon size={18} color="#1FA83D" />}
                   Status :
                 </div>
                 <div>
                   <span style={{
-                    backgroundColor: STATUS_COLORS[selectedSiswa.status],
+                    backgroundColor: STATUS_COLORS_HEX[selectedSiswa.status || 'present'], // Fallback to avoid error if null
                     color: '#FFFFFF',
                     padding: '4px 16px',
                     borderRadius: 6,
                     fontSize: 13,
                     fontWeight: 600,
                   }}>
-                    {selectedSiswa.status === 'alpha' ? 'Tidak Hadir' :
-                      selectedSiswa.status === 'sakit' ? 'Sakit' :
-                        selectedSiswa.status === 'izin' ? 'Izin' :
-                          selectedSiswa.status === 'hadir' ? 'Hadir' :
-                            'Pulang'}
+                    {selectedSiswa.status === 'absent' ? 'Tidak Hadir' :
+                      selectedSiswa.status === 'sick' ? 'Sakit' :
+                        selectedSiswa.status === 'excused' ? 'Izin' :
+                          selectedSiswa.status === 'present' ? 'Hadir' :
+                            selectedSiswa.status === 'late' ? 'Terlambat' :
+                              'Pulang'}
                   </span>
                 </div>
               </div>
 
               {/* Info Box - Ditampilkan untuk SEMUA status */}
               <div style={{
-                backgroundColor: selectedSiswa.status === 'hadir' ? '#F0FDF4' : '#EFF6FF',
-                border: `1px solid ${selectedSiswa.status === 'hadir' ? '#BBF7D0' : '#BFDBFE'}`,
+                backgroundColor: selectedSiswa.status === 'present' ? '#F0FDF4' : '#EFF6FF',
+                border: `1px solid ${selectedSiswa.status === 'present' ? '#BBF7D0' : '#BFDBFE'}`,
                 borderRadius: 8,
                 padding: 16,
                 textAlign: 'center',
-                marginBottom: (selectedSiswa.status === 'izin' || selectedSiswa.status === 'sakit' || selectedSiswa.status === 'pulang') && selectedSiswa.keterangan ? 24 : 0,
+                marginBottom: (selectedSiswa.status === 'excused' || selectedSiswa.status === 'sick' || selectedSiswa.status === 'late') && selectedSiswa.keterangan ? 24 : 0,
               }}>
                 <div style={{
                   fontSize: 14,
                   fontWeight: 600,
-                  color: selectedSiswa.status === 'hadir' ? '#166534' : '#1E40AF',
+                  color: selectedSiswa.status === 'present' ? '#166534' : '#1E40AF',
                 }}>
-                  {getStatusText(selectedSiswa.status, selectedSiswa.waktuHadir)}
+                  {getStatusText(selectedSiswa.status || 'present', selectedSiswa.waktuHadir)}
                 </div>
               </div>
 
               {/* Keterangan untuk izin, sakit, DAN PULANG */}
-              {(selectedSiswa.status === 'izin' || selectedSiswa.status === 'sakit' || selectedSiswa.status === 'pulang') && selectedSiswa.keterangan && (
+              {(selectedSiswa.status === 'excused' || selectedSiswa.status === 'sick' || selectedSiswa.status === 'late') && selectedSiswa.keterangan && (
                 <div>
                   <div style={{
                     fontSize: 14,
@@ -872,7 +875,7 @@ export default function KehadiranSiswaGuru({
               )}
 
               {/* Area Bukti Foto untuk izin, sakit, DAN PULANG */}
-              {(selectedSiswa.status === 'izin' || selectedSiswa.status === 'sakit' || selectedSiswa.status === 'pulang') && (
+              {(selectedSiswa.status === 'excused' || selectedSiswa.status === 'sick') && (
                 <div style={{ marginTop: selectedSiswa.keterangan ? 24 : 0 }}>
                   <div style={{
                     fontSize: 14,

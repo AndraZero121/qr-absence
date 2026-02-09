@@ -114,6 +114,20 @@ const Data = () => {
     setEditingIndex(null);
   };
 
+  const handleViewSurat = (student) => {
+    setPreviewModal({
+      open: true,
+      file: student.suratFile,
+      type: student.suratFile?.toLowerCase().endsWith('.pdf') ? 'pdf' : 'image',
+      studentName: student.nama,
+      fileName: student.suratFileName || 'Dokumen Pendukung',
+      nisn: student.nisn,
+      status: student.status,
+      keterangan: student.keterangan,
+      isTerlambat: student.wasTerlambat
+    });
+  };
+
   const getStatusBadge = (status, wasTerlambat) => {
     const configs = {
       'Hadir': { class: 'bg-emerald-100 text-emerald-700 border-emerald-200', icon: <FaCheckCircle /> },
@@ -249,7 +263,7 @@ const Data = () => {
                         autoFocus
                         className="w-full bg-white border-2 border-indigo-500 rounded-xl px-2 py-1.5 text-xs font-black outline-none shadow-lg shadow-indigo-100"
                       >
-                        {['Hadir', 'Izin', 'Sakit', 'Alpha', 'Pulang', 'Terlambat'].map(opt => <option key={val} value={opt}>{opt}</option>)}
+                        {['Hadir', 'Izin', 'Sakit', 'Alpha', 'Pulang', 'Terlambat'].map(opt => <option key={opt} value={opt}>{opt}</option>)}
                       </select>
                     ) : (
                       <div className="flex flex-col gap-1.5">

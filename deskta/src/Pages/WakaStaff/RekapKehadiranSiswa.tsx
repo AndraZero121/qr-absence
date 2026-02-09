@@ -9,6 +9,7 @@ interface RekapKehadiranSiswaProps {
   currentPage: string;
   onMenuClick: (page: string, payload?: any) => void;
   kelas?: string;
+  classId?: string;
   namaKelas?: string;
   waliKelas?: string;
   onBack?: () => void;
@@ -30,7 +31,7 @@ export default function RekapKehadiranSiswa({
   onLogout,
   currentPage,
   onMenuClick,
-  kelas = "X Mekatronika 1",
+  classId,
   namaKelas = "X Mekatronika 1",
   waliKelas = "Ewit Erniyah S.pd",
   onBack,
@@ -73,7 +74,45 @@ export default function RekapKehadiranSiswa({
     };
   }, []);
 
-  const [siswaData] = useState<SiswaRow[]>([]);
+  const [siswaData, setSiswaData] = useState<SiswaRow[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    
+    const fetchData = async () => {
+      if (!classId) return;
+
+      setLoading(true);
+      try {
+        const { dashboardService } = await import("../../services/dashboard");
+        const response: any = await dashboardService.getClassStudentsSummary(classId, { from: startDate, to: endDate }, { signal: controller.signal });
+        
+        const data = response.data || response;
+        const mappedData: SiswaRow[] = data.map((item: any, index: number) => ({
+          no: index + 1,
+          nisn: item.student.nisn,
+          namaSiswa: item.student.user?.name || "Siswa",
+          hadir: item.totals.present || 0,
+          sakit: item.totals.sick || 0,
+          izin: (item.totals.excused || 0) + (item.totals.izin || 0),
+          alpha: item.totals.absent || 0,
+          pulang: item.totals.return || 0,
+        }));
+        
+        setSiswaData(mappedData);
+      } catch (error: any) {
+        if (error.name !== 'AbortError') {
+          console.error("Failed to fetch rekap kehadiran", error);
+        }
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchData();
+    return () => controller.abort();
+  }, [classId, startDate, endDate]);
 
   const handleExportExcel = () => {
     // Buat data untuk Excel
@@ -530,7 +569,7 @@ export default function RekapKehadiranSiswa({
           columns={columns}
           data={siswaData}
           keyField="nisn"
-          emptyMessage="Belum ada data rekap kehadiran siswa."
+          emptyMessage={loading ? "Memuat data..." : "Belum ada data rekap kehadiran siswa."}
         />
       </div>
     </StaffLayout>

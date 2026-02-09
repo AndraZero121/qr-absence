@@ -16,8 +16,8 @@ interface Guru {
 interface TambahGuruFormProps {
   isOpen: boolean;
   onClose: () => void;
-  onSubmit: (data: any) => void;
-  initialData?: any;
+  onSubmit: (data: Omit<Guru, 'id'>) => void;
+  initialData?: Partial<Guru>;
   isEdit?: boolean;
   isLoading?: boolean;
   existingTeachers?: Guru[];

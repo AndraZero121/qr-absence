@@ -13,11 +13,18 @@ class WhatsAppService
 
     protected int $timeout;
 
+    protected array $retryConfig;
+
     public function __construct()
     {
         $this->baseUrl = config('whatsapp.api_url', 'http://localhost:3050/api');
         $this->enabled = config('whatsapp.enabled', true);
         $this->timeout = config('whatsapp.timeout', 30);
+        $this->retryConfig = config('whatsapp.retry', [
+            'enabled' => false,
+            'times' => 3,
+            'delay' => 1000,
+        ]);
     }
 
     /**
@@ -34,16 +41,21 @@ class WhatsAppService
         try {
             $phone = $this->formatPhoneNumber($to);
 
-            $response = Http::timeout($this->timeout)
-                ->post("{$this->baseUrl}/send-message", [
-                    'to' => $phone,
-                    'message' => $message,
-                ]);
+            $request = Http::timeout($this->timeout);
+
+            if ($this->retryConfig['enabled']) {
+                $request->retry($this->retryConfig['times'], $this->retryConfig['delay']);
+            }
+
+            $response = $request->post("{$this->baseUrl}/send-message", [
+                'to' => $phone,
+                'message' => $message,
+            ]);
 
             if ($response->successful()) {
                 Log::info('WhatsApp message sent', [
-                    'to' => $phone,
-                    'message' => substr($message, 0, 50).'...',
+                    'to' => $this->maskPhone($phone),
+                    'message' => $this->maskMessage($message),
                 ]);
 
                 return [
@@ -53,7 +65,7 @@ class WhatsAppService
             }
 
             Log::error('WhatsApp API error', [
-                'to' => $phone,
+                'to' => $this->maskPhone($phone),
                 'status' => $response->status(),
                 'body' => $response->body(),
             ]);
@@ -65,7 +77,7 @@ class WhatsAppService
             ];
         } catch (\Exception $e) {
             Log::error('WhatsApp exception', [
-                'to' => $to,
+                'to' => $this->maskPhone($to),
                 'error' => $e->getMessage(),
             ]);
 
@@ -94,18 +106,24 @@ class WhatsAppService
         try {
             $phone = $this->formatPhoneNumber($to);
 
-            $response = Http::timeout($this->timeout)
-                ->post("{$this->baseUrl}/send-message", [
-                    'to' => $phone,
-                    'message' => $message,
-                    'media_url' => $mediaUrl,
-                    'media_type' => $mediaType,
-                ]);
+            $request = Http::timeout($this->timeout);
+
+            if ($this->retryConfig['enabled']) {
+                $request->retry($this->retryConfig['times'], $this->retryConfig['delay']);
+            }
+
+            $response = $request->post("{$this->baseUrl}/send-message", [
+                'to' => $phone,
+                'message' => $message,
+                'media_url' => $mediaUrl,
+                'media_type' => $mediaType,
+            ]);
 
             if ($response->successful()) {
                 Log::info('WhatsApp media message sent', [
-                    'to' => $phone,
+                    'to' => $this->maskPhone($phone),
                     'media_type' => $mediaType,
+                    'message_snippet' => $this->maskMessage($message),
                 ]);
 
                 return [
@@ -115,7 +133,7 @@ class WhatsAppService
             }
 
             Log::error('WhatsApp media API error', [
-                'to' => $phone,
+                'to' => $this->maskPhone($phone),
                 'status' => $response->status(),
             ]);
 
@@ -125,7 +143,7 @@ class WhatsAppService
             ];
         } catch (\Exception $e) {
             Log::error('WhatsApp media exception', [
-                'to' => $to,
+                'to' => $this->maskPhone($to),
                 'error' => $e->getMessage(),
             ]);
 
@@ -192,5 +210,29 @@ class WhatsAppService
     public function isEnabled(): bool
     {
         return $this->enabled;
+    }
+
+    /**
+     * Mask phone number for privacy
+     */
+    protected function maskPhone(string $phone): string
+    {
+        if (strlen($phone) < 8) {
+            return '********';
+        }
+
+        return substr($phone, 0, 4).'****'.substr($phone, -4);
+    }
+
+    /**
+     * Mask message content for privacy
+     */
+    protected function maskMessage(string $message): string
+    {
+        if (strlen($message) < 10) {
+            return '***';
+        }
+
+        return substr($message, 0, 3).'...'.substr($message, -3);
     }
 }

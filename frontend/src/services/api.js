@@ -32,8 +32,8 @@ apiClient.interceptors.response.use(
         if (error.response?.status === 401) {
             // Clear token and redirect to login only if not already there
             localStorage.removeItem(TOKEN_KEY);
-            localStorage.removeItem('userRole');
-            localStorage.removeItem('userIdentifier');
+            localStorage.removeItem('user_role');
+            localStorage.removeItem('user_data');
             
             if (window.location.pathname !== '/' && !window.location.pathname.startsWith('/login')) {
                 window.location.href = '/';

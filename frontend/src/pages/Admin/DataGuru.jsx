@@ -9,62 +9,114 @@ import {
   FaTrashAlt,
   FaChevronDown,
   FaUserTie,
-  FaFilter
+  FaFilter,
+  FaCalendarAlt,
+  FaEye
 } from 'react-icons/fa';
+import { useNavigate } from 'react-router-dom';
 import * as XLSX from 'xlsx';
-import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable';
 import PageWrapper from '../../components/ui/PageWrapper';
+import apiClient from '../../services/api';
 
 function DataGuru() {
+  const navigate = useNavigate();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [showExportMenu, setShowExportMenu] = useState(false);
-  const [teachers, setTeachers] = useState([
-    { id: 1, kodeGuru: 'GR001', namaGuru: 'Budi Santoso', jabatan: 'Guru', mataPelajaran: 'Informatika' },
-    { id: 2, kodeGuru: 'GR002', namaGuru: 'Siti Aminah', jabatan: 'Waka', bidangWaka: 'Kesiswaan' },
-  ]);
+  const [teachers, setTeachers] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [editingTeacher, setEditingTeacher] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
-  const [filterJabatan, setFilterJabatan] = useState('');
   
   const [formData, setFormData] = useState({
-    kodeGuru: '', namaGuru: '', jabatan: 'Guru', mataPelajaran: '', bidangWaka: '', konsentrasiKeahlian: '', kelas: '', jurusan: ''
+    name: '', username: '', email: '', password: '', nip: '', phone: '', contact: '', subject: '', homeroom_class_id: ''
   });
 
-  const fileInputRef = useRef(null);
+  const [classes, setClasses] = useState([]);
+
+  const fetchTeachers = async () => {
+    try {
+      setLoading(true);
+      const res = await apiClient.get('/teachers', { params: { per_page: -1 } });
+      const data = res.data?.data || res.data || [];
+      setTeachers(Array.isArray(data) ? data : []);
+    } catch (err) {
+      console.error("Error fetching teachers:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchClasses = async () => {
+    try {
+      const res = await apiClient.get('/classes', { params: { per_page: -1 } });
+      setClasses(res.data || []);
+    } catch (err) {
+      console.error("Error fetching classes:", err);
+    }
+  };
+
+  useEffect(() => {
+    fetchTeachers();
+    fetchClasses();
+  }, []);
 
   const handleEditTeacher = (teacher) => {
     setEditingTeacher(teacher);
-    setFormData({ ...teacher });
+    setFormData({
+      name: teacher.user?.name || '',
+      username: teacher.user?.username || '',
+      email: teacher.user?.email || '',
+      password: '', // Don't show password
+      nip: teacher.nip || '',
+      phone: teacher.user?.phone || '',
+      contact: teacher.user?.contact || '',
+      subject: teacher.subject || '',
+      homeroom_class_id: teacher.homeroom_class_id || ''
+    });
     setIsModalOpen(true);
   };
 
   const handleCloseModal = () => {
     setIsModalOpen(false);
     setEditingTeacher(null);
-    setFormData({ kodeGuru: '', namaGuru: '', jabatan: 'Guru', mataPelajaran: '', bidangWaka: '', konsentrasiKeahlian: '', kelas: '', jurusan: '' });
+    setFormData({
+      name: '', username: '', email: '', password: '', nip: '', phone: '', contact: '', subject: '', homeroom_class_id: ''
+    });
   };
 
-  const handleAddTeacher = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    if (editingTeacher) {
-      setTeachers(teachers.map(t => t.id === editingTeacher.id ? { ...formData, id: t.id } : t));
-    } else {
-      setTeachers([...teachers, { ...formData, id: Date.now() }]);
+    try {
+      if (editingTeacher) {
+        await apiClient.put(`/teachers/${editingTeacher.id}`, formData);
+      } else {
+        await apiClient.post('/teachers', formData);
+      }
+      handleCloseModal();
+      fetchTeachers();
+    } catch (err) {
+      console.error("Error saving teacher:", err);
+      alert(err.response?.data?.message || "Terjadi kesalahan saat menyimpan data.");
     }
-    handleCloseModal();
   };
 
-  const handleDeleteTeacher = (id) => {
+  const handleDeleteTeacher = async (id) => {
     if (window.confirm('Hapus data guru ini?')) {
-      setTeachers(teachers.filter(t => t.id !== id));
+      try {
+        await apiClient.delete(`/teachers/${id}`);
+        fetchTeachers();
+      } catch (err) {
+        console.error("Error deleting teacher:", err);
+      }
     }
   };
 
   const filteredTeachers = teachers.filter(t => 
-    t.namaGuru.toLowerCase().includes(searchTerm.toLowerCase()) &&
-    (filterJabatan === '' || t.jabatan === filterJabatan)
+    (t.user?.name?.toLowerCase().includes(searchTerm.toLowerCase()) || 
+     t.nip?.toLowerCase().includes(searchTerm.toLowerCase()))
   );
+
+  const fileInputRef = useRef(null);
 
   return (
     <PageWrapper className="max-w-[1600px] mx-auto p-6 md:p-10 space-y-8 font-sans">
@@ -104,25 +156,11 @@ function DataGuru() {
                 <FaSearch className="absolute left-6 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-indigo-500 transition-colors" />
                 <input 
                     type="text" 
-                    placeholder="Cari nama atau kode guru..." 
+                    placeholder="Cari nama atau NIP guru..." 
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
                     className="w-full pl-14 pr-6 py-4 bg-white border border-gray-200 rounded-[1.5rem] focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none transition-all font-bold text-gray-700"
                 />
-            </div>
-            <div className="relative">
-                <select 
-                    value={filterJabatan} 
-                    onChange={(e) => setFilterJabatan(e.target.value)}
-                    className="appearance-none pl-6 pr-12 py-4 bg-white border border-gray-200 rounded-[1.5rem] font-black text-xs uppercase tracking-widest text-gray-600 outline-none focus:ring-4 focus:ring-indigo-500/10 transition-all cursor-pointer min-w-[200px]"
-                >
-                    <option value="">Semua Jabatan</option>
-                    <option value="Guru">Guru</option>
-                    <option value="Waka">Waka</option>
-                    <option value="Kapro">Kapro</option>
-                    <option value="Wali Kelas">Wali Kelas</option>
-                </select>
-                <FaFilter className="absolute right-6 top-1/2 -translate-y-1/2 text-gray-300 pointer-events-none" size={10} />
             </div>
         </div>
 
@@ -132,7 +170,7 @@ function DataGuru() {
                 <thead>
                     <tr className="bg-white border-b border-gray-100">
                         <th className="px-10 py-6 text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] text-center w-24">No</th>
-                        <th className="px-8 py-6 text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] w-32">Kode</th>
+                        <th className="px-8 py-6 text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] w-32">Identitas (NIP)</th>
                         <th className="px-8 py-6 text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">Nama Tenaga Pendidik</th>
                         <th className="px-8 py-6 text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">Jabatan</th>
                         <th className="px-8 py-6 text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">Detail Penugasan</th>
@@ -143,26 +181,31 @@ function DataGuru() {
                     {filteredTeachers.map((t, i) => (
                         <tr key={t.id} className="hover:bg-indigo-50/30 transition-all duration-300 group">
                             <td className="px-10 py-6 text-sm font-black text-gray-300 text-center group-hover:text-indigo-400 transition-colors">{i + 1}</td>
-                            <td className="px-8 py-6 font-mono text-xs font-bold text-indigo-600 bg-indigo-50/50 rounded-xl my-2 inline-block border border-indigo-100 uppercase tracking-widest">{t.kodeGuru}</td>
+                            <td className="px-8 py-6 font-mono text-xs font-bold text-indigo-600 bg-indigo-50/50 rounded-xl my-2 inline-block border border-indigo-100 uppercase tracking-widest">{t.nip || '-'}</td>
                             <td className="px-8 py-6">
-                                <span className="text-sm font-black text-gray-800 group-hover:text-indigo-700 transition-colors uppercase tracking-tight">{t.namaGuru}</span>
+                                <span className="text-sm font-black text-gray-800 group-hover:text-indigo-700 transition-colors uppercase tracking-tight">{t.user?.name}</span>
                             </td>
                             <td className="px-8 py-6">
                                 <span className={`px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest border ${
-                                    t.jabatan === 'Guru' ? 'bg-blue-50 text-blue-700 border-blue-100' :
-                                    t.jabatan === 'Waka' ? 'bg-purple-50 text-purple-700 border-purple-100' :
-                                    'bg-emerald-50 text-emerald-700 border-emerald-100'
+                                    t.homeroom_class_id ? 'bg-emerald-50 text-emerald-700 border-emerald-100' : 'bg-blue-50 text-blue-700 border-blue-100'
                                 }`}>
-                                    {t.jabatan}
+                                    {t.homeroom_class_id ? 'Wali Kelas' : 'Guru Mapel'}
                                 </span>
                             </td>
-                            <td className="px-8 py-6 text-sm font-bold text-gray-500">{t.mataPelajaran || t.bidangWaka || t.konsentrasiKeahlian || '-'}</td>
+                            <td className="px-8 py-6 text-sm font-bold text-gray-500">{t.subject || t.homeroom_class?.name || '-'}</td>
                             <td className="px-10 py-6">
                                 <div className="flex justify-center gap-3">
-                                    <button onClick={() => handleEditTeacher(t)} className="w-11 h-11 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center hover:bg-indigo-600 hover:text-white transition-all shadow-sm group/btn active:scale-90">
+                                    <button 
+                                        onClick={() => navigate(`/admin/jadwal-guru/${t.id}`)} 
+                                        className="w-11 h-11 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center hover:bg-indigo-600 hover:text-white transition-all shadow-sm group/btn active:scale-90"
+                                        title="Lihat Jadwal"
+                                    >
+                                        <FaCalendarAlt size={16} />
+                                    </button>
+                                    <button onClick={() => handleEditTeacher(t)} className="w-11 h-11 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center hover:bg-amber-500 hover:text-white transition-all shadow-sm group/btn active:scale-90" title="Edit Data">
                                         <FaEdit size={16} />
                                     </button>
-                                    <button onClick={() => handleDeleteTeacher(t.id)} className="w-11 h-11 rounded-2xl bg-red-50 text-red-500 flex items-center justify-center hover:bg-red-500 hover:text-white transition-all shadow-sm group/btn active:scale-90">
+                                    <button onClick={() => handleDeleteTeacher(t.id)} className="w-11 h-11 rounded-2xl bg-red-50 text-red-500 flex items-center justify-center hover:bg-red-500 hover:text-white transition-all shadow-sm group/btn active:scale-90" title="Hapus Guru">
                                         <FaTrashAlt size={16} />
                                     </button>
                                 </div>
@@ -174,7 +217,7 @@ function DataGuru() {
         </div>
 
         {/* EMPTY STATE */}
-        {filteredTeachers.length === 0 && (
+        {filteredTeachers.length === 0 && !loading && (
             <div className="py-24 text-center">
                 <div className="w-24 h-24 bg-gray-50 rounded-[2rem] flex items-center justify-center mx-auto mb-6 text-gray-200">
                     <FaChalkboardTeacher size={48} />
@@ -182,34 +225,59 @@ function DataGuru() {
                 <p className="text-gray-400 font-black uppercase tracking-widest text-sm italic">Data guru tidak ditemukan</p>
             </div>
         )}
+        {loading && (
+            <div className="py-24 text-center">
+                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto mb-4"></div>
+                <p className="text-gray-400 font-black uppercase tracking-widest text-sm">Memuat Data...</p>
+            </div>
+        )}
       </div>
 
       {/* MINIMALIST MODAL */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4" onClick={handleCloseModal}>
-          <div className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-lg overflow-hidden animate-in fade-in zoom-in duration-300" onClick={(e) => e.stopPropagation()}>
+          <div className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-2xl overflow-hidden animate-in fade-in zoom-in duration-300" onClick={(e) => e.stopPropagation()}>
             <div className="bg-gradient-to-br from-indigo-600 to-indigo-800 p-8 text-white relative">
               <h2 className="text-2xl font-black tracking-tight">{editingTeacher ? 'Ubah Data Guru' : 'Tambah Guru Baru'}</h2>
               <p className="text-indigo-100 text-[10px] font-black uppercase tracking-widest mt-1 opacity-80">Lengkapi formulir di bawah ini</p>
-              <button className="absolute top-8 right-8 text-white/60 hover:text-white transition-colors text-3xl leading-none font-light" onClick={handleCloseModal}>&times;</button>
+              <button className="absolute top-8 right-8 text-white/60 hover:text-white transition-colors text-4xl leading-none font-light" onClick={handleCloseModal}>&times;</button>
             </div>
             
-            <form onSubmit={handleAddTeacher} className="p-8 space-y-6">
-              <div className="grid grid-cols-1 gap-5">
+            <form onSubmit={handleSubmit} className="p-8 space-y-6 max-h-[70vh] overflow-y-auto">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                 <div className="space-y-2">
-                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Kode & Nama Lengkap</label>
-                    <div className="flex gap-3">
-                        <input type="text" placeholder="KODE" value={formData.kodeGuru} onChange={(e) => setFormData({...formData, kodeGuru: e.target.value})} className="w-24 px-5 py-4 bg-gray-50 border border-gray-200 rounded-2xl focus:ring-4 focus:ring-indigo-500/10 outline-none font-black text-center uppercase" required />
-                        <input type="text" placeholder="Nama Lengkap Guru" value={formData.namaGuru} onChange={(e) => setFormData({...formData, namaGuru: e.target.value})} className="flex-1 px-5 py-4 bg-gray-50 border border-gray-200 rounded-2xl focus:ring-4 focus:ring-indigo-500/10 outline-none font-bold" required />
-                    </div>
+                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Nama Lengkap</label>
+                    <input type="text" placeholder="Nama Lengkap Guru" value={formData.name} onChange={(e) => setFormData({...formData, name: e.target.value})} className="w-full px-5 py-4 bg-gray-50 border border-gray-200 rounded-2xl focus:ring-4 focus:ring-indigo-500/10 outline-none font-bold" required />
                 </div>
                 <div className="space-y-2">
-                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Jabatan Fungsional</label>
-                    <select value={formData.jabatan} onChange={(e) => setFormData({...formData, jabatan: e.target.value})} className="w-full px-5 py-4 bg-gray-50 border border-gray-200 rounded-2xl focus:ring-4 focus:ring-indigo-500/10 outline-none font-black uppercase text-xs tracking-widest cursor-pointer appearance-none">
-                        <option value="Guru">Guru</option>
-                        <option value="Waka">Waka</option>
-                        <option value="Kapro">Kapro</option>
-                        <option value="Wali Kelas">Wali Kelas</option>
+                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Username</label>
+                    <input type="text" placeholder="Username login" value={formData.username} onChange={(e) => setFormData({...formData, username: e.target.value})} className="w-full px-5 py-4 bg-gray-50 border border-gray-200 rounded-2xl focus:ring-4 focus:ring-indigo-500/10 outline-none font-bold" required />
+                </div>
+                <div className="space-y-2">
+                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Email</label>
+                    <input type="email" placeholder="Email" value={formData.email} onChange={(e) => setFormData({...formData, email: e.target.value})} className="w-full px-5 py-4 bg-gray-50 border border-gray-200 rounded-2xl focus:ring-4 focus:ring-indigo-500/10 outline-none font-bold" />
+                </div>
+                <div className="space-y-2">
+                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Password</label>
+                    <input type="password" placeholder={editingTeacher ? "Kosongkan jika tidak diubah" : "Password"} value={formData.password} onChange={(e) => setFormData({...formData, password: e.target.value})} className="w-full px-5 py-4 bg-gray-50 border border-gray-200 rounded-2xl focus:ring-4 focus:ring-indigo-500/10 outline-none font-bold" required={!editingTeacher} />
+                </div>
+                <div className="space-y-2">
+                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">NIP</label>
+                    <input type="text" placeholder="NIP" value={formData.nip} onChange={(e) => setFormData({...formData, nip: e.target.value})} className="w-full px-5 py-4 bg-gray-50 border border-gray-200 rounded-2xl focus:ring-4 focus:ring-indigo-500/10 outline-none font-bold" required />
+                </div>
+                <div className="space-y-2">
+                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Telepon/WhatsApp</label>
+                    <input type="text" placeholder="08..." value={formData.phone} onChange={(e) => setFormData({...formData, phone: e.target.value})} className="w-full px-5 py-4 bg-gray-50 border border-gray-200 rounded-2xl focus:ring-4 focus:ring-indigo-500/10 outline-none font-bold" />
+                </div>
+                <div className="space-y-2">
+                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Mata Pelajaran Utama</label>
+                    <input type="text" placeholder="Contoh: Matematika" value={formData.subject} onChange={(e) => setFormData({...formData, subject: e.target.value})} className="w-full px-5 py-4 bg-gray-50 border border-gray-200 rounded-2xl focus:ring-4 focus:ring-indigo-500/10 outline-none font-bold" />
+                </div>
+                <div className="space-y-2">
+                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Penugasan Wali Kelas</label>
+                    <select value={formData.homeroom_class_id} onChange={(e) => setFormData({...formData, homeroom_class_id: e.target.value})} className="w-full px-5 py-4 bg-gray-50 border border-gray-200 rounded-2xl focus:ring-4 focus:ring-indigo-500/10 outline-none font-bold appearance-none cursor-pointer">
+                        <option value="">Bukan Wali Kelas</option>
+                        {classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                     </select>
                 </div>
               </div>

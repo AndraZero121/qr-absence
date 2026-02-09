@@ -11,7 +11,7 @@ interface AbsensiRecord {
   jamPelajaran: string;
   mataPelajaran: string;
   guru: string;
-  status: "alpha" | "izin" | "sakit" | "hadir" | "pulang";
+  status: 'present' | 'absent' | 'sick' | 'excused' | 'late' | 'early_departure';
   keterangan?: string; // Tambahan untuk izin/sakit/pulang
   namaSiswa?: string;
   nis?: string;
@@ -133,16 +133,13 @@ export default function TidakHadirPenguruskelas({
   onLogout = () => { },
 }: TidakHadirPenguruskelasProps) {
   const [startDate, setStartDate] = useState(new Date().toISOString().split('T')[0]);
-  const [endDate, setEndDate] = useState(new Date().toISOString().split('T')[0]);
   const [statusFilter, setStatusFilter] = useState<string>("semua");
   const [selectedRecord, setSelectedRecord] = useState<AbsensiRecord | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [attendanceData, setAttendanceData] = useState<AbsensiRecord[]>([]);
-  const [loading, setLoading] = useState(false);
   const { alert: popupAlert } = usePopup();
 
   const fetchAttendance = async () => {
-    setLoading(true);
     try {
       // Fetch attendance separately for start and end date if they are different, or loop?
       // For now, let's just fetch for the start date as 'date' param, 
@@ -167,8 +164,6 @@ export default function TidakHadirPenguruskelas({
     } catch (error) {
       console.error("Error fetching attendance:", error);
       popupAlert("Gagal mengambil data kehadiran");
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -184,10 +179,10 @@ export default function TidakHadirPenguruskelas({
     return attendanceData.filter((item) => {
       let statusMatch = true;
       if (statusFilter !== "semua") {
-        if (statusFilter === "izin/sakit") {
-          statusMatch = item.status === "izin" || item.status === "sakit";
-        } else if (statusFilter === "alpha") {
-          statusMatch = item.status === "alpha" || item.status === "absent"; // Map absent to alpha
+        if (statusFilter === "excused/sick") {
+          statusMatch = item.status === "excused" || item.status === "sick";
+        } else if (statusFilter === "absent") {
+          statusMatch = item.status === "absent";
         } else {
           statusMatch = item.status === statusFilter;
         }
@@ -198,11 +193,11 @@ export default function TidakHadirPenguruskelas({
 
   // Hitung summary berdasarkan data filtered
   const summary = useMemo(() => {
-    const hadir = attendanceData.filter((d) => d.status === "hadir").length; // Summary form ALL fetched data or filtered? Usually for dashboard cards it's good to show totals for the day.
-    const pulang = attendanceData.filter((d) => d.status === "pulang").length;
-    const izin = attendanceData.filter((d) => d.status === "izin").length;
-    const sakit = attendanceData.filter((d) => d.status === "sakit").length;
-    const alpha = attendanceData.filter((d) => d.status === "alpha" || d.status === "absent").length;
+    const hadir = attendanceData.filter((d) => d.status === "present").length;
+    const pulang = attendanceData.filter((d) => d.status === "early_departure").length;
+    const izin = attendanceData.filter((d) => d.status === "excused").length;
+    const sakit = attendanceData.filter((d) => d.status === "sick").length;
+    const alpha = attendanceData.filter((d) => d.status === "absent" || d.status === "late").length; // Treating late as alpha for now? Or separating? Original code mapped absent to alpha.
 
     return { hadir, pulang, izin, sakit, alpha, total: attendanceData.length };
   }, [attendanceData]);
@@ -220,20 +215,23 @@ export default function TidakHadirPenguruskelas({
   const StatusButton = ({ status, row }: { status: string; row: AbsensiRecord }) => {
     let bgColor = "#D90000"; // MERAH - Tidak Hadir
     let label = "Tidak Hadir";
-    let textColor = "#FFFFFF";
+    const textColor = "#FFFFFF";
 
-    if (status === "izin") {
+    if (status === "excused") {
       bgColor = "#ACA40D"; // KUNING - Izin
       label = "Izin";
-    } else if (status === "sakit") {
+    } else if (status === "sick") {
       bgColor = "#520C8F"; // UNGU - Sakit
       label = "Sakit";
-    } else if (status === "pulang") {
+    } else if (status === "early_departure") {
       bgColor = "#2F85EB"; // BIRU - Pulang
       label = "Pulang";
-    } else if (status === "hadir") {
+    } else if (status === "present") {
       bgColor = "#1FA83D"; // HIJAU - Hadir
       label = "Hadir";
+    } else if (status === "late") {
+      bgColor = "#F59E0B"; // ORANGE - Terlambat
+      label = "Terlambat";
     }
 
     return (
@@ -316,25 +314,27 @@ export default function TidakHadirPenguruskelas({
   // Status filter options - Alpha diubah jadi Tidak Hadir
   const statusOptions = [
     { label: "Semua Status", value: "semua" },
-    { label: "Hadir", value: "hadir" },
-    { label: "Tidak Hadir", value: "alpha" },
-    { label: "Izin/Sakit", value: "izin/sakit" },
-    { label: "Pulang", value: "pulang" },
+    { label: "Hadir", value: "present" },
+    { label: "Tidak Hadir", value: "absent" },
+    { label: "Izin/Sakit", value: "excused/sick" },
+    { label: "Pulang", value: "early_departure" },
   ];
 
   // Fungsi untuk mendapatkan teks status
   const getStatusText = (status: string) => {
     switch (status) {
-      case "alpha":
+      case "absent":
         return "Siswa tidak hadir tanpa keterangan";
-      case "izin":
+      case "excused":
         return "Siswa izin dengan keterangan";
-      case "sakit":
+      case "sick":
         return "Siswa sakit dengan surat dokter";
-      case "hadir":
+      case "present":
         return "Siswa hadir tepat waktu";
-      case "pulang":
+      case "early_departure":
         return "Siswa pulang lebih awal karena ada kepentingan";
+      case "late":
+        return "Siswa terlambat hadir";
       default:
         return status;
     }
@@ -343,11 +343,12 @@ export default function TidakHadirPenguruskelas({
   // Helper function untuk warna status
   const getStatusColor = (status: string) => {
     switch (status) {
-      case "alpha": return "#D90000"; // MERAH - Tidak Hadir
-      case "izin": return "#ACA40D"; // KUNING - Izin
-      case "sakit": return "#520C8F"; // UNGU - Sakit
-      case "hadir": return "#1FA83D"; // HIJAU - Hadir
-      case "pulang": return "#2F85EB"; // BIRU - Pulang
+      case "absent": return "#D90000"; // MERAH - Tidak Hadir
+      case "excused": return "#ACA40D"; // KUNING - Izin
+      case "sick": return "#520C8F"; // UNGU - Sakit
+      case "present": return "#1FA83D"; // HIJAU - Hadir
+      case "early_departure": return "#2F85EB"; // BIRU - Pulang
+      case "late": return "#F59E0B"; // ORANGE - Terlambat
       default: return "#6B7280";
     }
   };
@@ -764,11 +765,12 @@ export default function TidakHadirPenguruskelas({
                     fontSize: 13,
                     fontWeight: 600,
                   }}>
-                    {selectedRecord.status === "alpha" ? "Tidak Hadir" :
-                      selectedRecord.status === "sakit" ? "Sakit" :
-                        selectedRecord.status === "izin" ? "Izin" :
-                          selectedRecord.status === "hadir" ? "Hadir" :
-                            "Pulang"}
+                    {selectedRecord.status === "absent" ? "Tidak Hadir" :
+                      selectedRecord.status === "sick" ? "Sakit" :
+                        selectedRecord.status === "excused" ? "Izin" :
+                          selectedRecord.status === "present" ? "Hadir" :
+                            selectedRecord.status === "late" ? "Terlambat" :
+                              "Pulang"}
                   </span>
                 </div>
               </div>
@@ -780,7 +782,7 @@ export default function TidakHadirPenguruskelas({
                 borderRadius: 8,
                 padding: 16,
                 textAlign: "center",
-                marginBottom: (selectedRecord.status === "izin" || selectedRecord.status === "sakit" || selectedRecord.status === "pulang") && selectedRecord.keterangan ? 24 : 0,
+                marginBottom: (selectedRecord.status === "excused" || selectedRecord.status === "sick" || selectedRecord.status === "early_departure") && selectedRecord.keterangan ? 24 : 0,
               }}>
                 <div style={{
                   fontSize: 14,
@@ -792,7 +794,7 @@ export default function TidakHadirPenguruskelas({
               </div>
 
               {/* Keterangan untuk izin, sakit, DAN PULANG */}
-              {(selectedRecord.status === "izin" || selectedRecord.status === "sakit" || selectedRecord.status === "pulang") && selectedRecord.keterangan && (
+              {(selectedRecord.status === "excused" || selectedRecord.status === "sick" || selectedRecord.status === "early_departure") && selectedRecord.keterangan && (
                 <div>
                   <div style={{
                     fontSize: 14,
@@ -821,7 +823,7 @@ export default function TidakHadirPenguruskelas({
               )}
 
               {/* Area Bukti Foto untuk izin, sakit, DAN PULANG */}
-              {(selectedRecord.status === "izin" || selectedRecord.status === "sakit" || selectedRecord.status === "pulang") && (
+              {(selectedRecord.status === "excused" || selectedRecord.status === "sick" || selectedRecord.status === "early_departure") && (
                 <div style={{ marginTop: selectedRecord.keterangan ? 24 : 0 }}>
                   <div style={{
                     fontSize: 14,
@@ -847,16 +849,14 @@ export default function TidakHadirPenguruskelas({
                       color: "#9CA3AF",
                       textAlign: "center",
                     }}>
-                      {selectedRecord.status === "hadir"
-                        ? "Tidak ada bukti foto yang diperlukan"
-                        : "[Area untuk menampilkan bukti foto]"}
+                      [Area untuk menampilkan bukti foto]
                     </p>
                   </div>
                 </div>
               )}
 
               {/* Catatan untuk status Hadir */}
-              {selectedRecord.status === "hadir" && (
+              {selectedRecord.status === "present" && (
                 <div style={{
                   marginTop: 24,
                   padding: "12px 16px",

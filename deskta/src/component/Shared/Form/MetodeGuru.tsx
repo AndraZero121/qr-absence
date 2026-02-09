@@ -52,14 +52,15 @@ export function MetodeGuru({
 
       // Optional: Close modal or stay open for next student?
       // Usually scan multiple students. So stay open.
-    } catch (e: any) {
-      console.error(e);
-      await popupAlert(`❌ Gagal: ${e.response?.data?.message || e.message || 'QR tidak valid'}`);
+    } catch (e: unknown) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const error = e as any;
+      await popupAlert(`❌ Gagal: ${error.response?.data?.message || error.message || 'QR tidak valid'}`);
     }
   };
 
   const handleError = (_err: string) => {
-    // console.warn(err);
+    console.error("Scanner Error:", _err);
   };
 
   const handleClose = () => {
@@ -247,6 +248,7 @@ export function MetodeGuru({
                   onChange={(e) => setDispTanggal(e.target.value)}
                   style={{ padding: '12px', borderRadius: '12px', border: '1px solid #D1D5DB', width: '100%', boxSizing: 'border-box' }}
                 />
+              </div>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                   <input
                     type="time"
@@ -261,7 +263,6 @@ export function MetodeGuru({
                     style={{ padding: '12px', borderRadius: '12px', border: '1px solid #D1D5DB', width: '100%', boxSizing: 'border-box' }}
                   />
                 </div>
-              </div>
               <textarea
                 value={dispKeterangan}
                 onChange={(e) => setDispKeterangan(e.target.value)}

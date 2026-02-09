@@ -43,14 +43,14 @@ const RiwayatKehadiran = () => {
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [selectedStudent, setSelectedStudent] = useState(null);
 
-  const fetchSummary = async (classId) => {
+  const fetchSummary = React.useCallback(async (cid) => {
     try {
       setLoading(true);
       const [summaryRes, absencesRes] = await Promise.all([
-        apiClient.get(`/classes/${classId}/students/attendance-summary`, {
+        apiClient.get(`/classes/${cid}/students/attendance-summary`, {
           params: { from: startDate, to: endDate }
         }),
-        apiClient.get(`/classes/${classId}/students/absences`, {
+        apiClient.get(`/classes/${cid}/students/absences`, {
           params: { from: startDate, to: endDate }
         })
       ]);
@@ -62,7 +62,7 @@ const RiwayatKehadiran = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [startDate, endDate]);
 
   useEffect(() => {
     const init = async () => {
@@ -78,7 +78,7 @@ const RiwayatKehadiran = () => {
       }
     };
     init();
-  }, []);
+  }, [fetchSummary]);
 
   const handleApplyPeriode = () => {
     if (classInfo.id) fetchSummary(classInfo.id);
@@ -86,6 +86,74 @@ const RiwayatKehadiran = () => {
   };
 
   const getCount = (totals, status) => totals[status] || 0;
+
+  const handleExportExcel = async () => {
+    try {
+      const workbook = new ExcelJS.Workbook();
+      const worksheet = workbook.addWorksheet('Rekap Kehadiran');
+
+      worksheet.columns = [
+        { header: 'No', key: 'no', width: 5 },
+        { header: 'Nama Siswa', key: 'name', width: 30 },
+        { header: 'NISN', key: 'nisn', width: 15 },
+        { header: 'Hadir', key: 'present', width: 10 },
+        { header: 'Izin', key: 'excused', width: 10 },
+        { header: 'Sakit', key: 'sick', width: 10 },
+        { header: 'Alpha', key: 'absent', width: 10 },
+        { header: 'Telat', key: 'late', width: 10 },
+      ];
+
+      attendanceData.forEach((item, index) => {
+        worksheet.addRow({
+          no: index + 1,
+          name: item.student.user?.name,
+          nisn: item.student.nisn,
+          present: getCount(item.totals, 'present'),
+          excused: getCount(item.totals, 'excused') + getCount(item.totals, 'izin'),
+          sick: getCount(item.totals, 'sick'),
+          absent: getCount(item.totals, 'absent'),
+          late: getCount(item.totals, 'late'),
+        });
+      });
+
+      const buffer = await workbook.xlsx.writeBuffer();
+      saveAs(new Blob([buffer]), `Rekap_Kehadiran_${classInfo.name}_${startDate}_${endDate}.xlsx`);
+    } catch (error) {
+      console.error('Export Excel failed:', error);
+    }
+    setIsExportOpen(false);
+  };
+
+  const handleExportPDF = () => {
+    try {
+      const doc = new jsPDF();
+      doc.text(`Rekapitulasi Kehadiran Kelas: ${classInfo.name}`, 14, 15);
+      doc.text(`Periode: ${startDate} s/d ${endDate}`, 14, 22);
+
+      const tableData = attendanceData.map((item, index) => [
+        index + 1,
+        item.student.user?.name,
+        getCount(item.totals, 'present'),
+        getCount(item.totals, 'excused') + getCount(item.totals, 'izin'),
+        getCount(item.totals, 'sick'),
+        getCount(item.totals, 'absent'),
+        getCount(item.totals, 'late'),
+      ]);
+
+      autoTable(doc, {
+        startY: 30,
+        head: [['No', 'Nama Siswa', 'H', 'I', 'S', 'A', 'T']],
+        body: tableData,
+        theme: 'grid',
+        headStyles: { fillColor: [79, 70, 229] }
+      });
+
+      doc.save(`Rekap_Kehadiran_${classInfo.name}.pdf`);
+    } catch (error) {
+      console.error('Export PDF failed:', error);
+    }
+    setIsExportOpen(false);
+  };
 
   const openDetailModal = (studentId) => {
     const record = absencesList.find(a => String(a.student?.id) === String(studentId));
@@ -160,10 +228,16 @@ const RiwayatKehadiran = () => {
                 </button>
                 {isExportOpen && (
                     <div className="absolute top-full right-0 mt-3 w-56 bg-white rounded-3xl shadow-2xl border border-gray-100 z-50 p-3 animate-in fade-in slide-in-from-top-2 duration-300">
-                        <button className="w-full text-left px-6 py-4 hover:bg-gray-50 rounded-2xl transition-colors font-bold text-gray-700 flex items-center gap-3 text-sm">
+                        <button 
+                            onClick={handleExportExcel}
+                            className="w-full text-left px-6 py-4 hover:bg-gray-50 rounded-2xl transition-colors font-bold text-gray-700 flex items-center gap-3 text-sm"
+                        >
                             <span className="text-emerald-500"><FaFileExcel /></span> Excel Report
                         </button>
-                        <button className="w-full text-left px-6 py-4 hover:bg-gray-50 rounded-2xl transition-colors font-bold text-gray-700 flex items-center gap-3 text-sm border-t border-gray-50">
+                        <button 
+                            onClick={handleExportPDF}
+                            className="w-full text-left px-6 py-4 hover:bg-gray-50 rounded-2xl transition-colors font-bold text-gray-700 flex items-center gap-3 text-sm border-t border-gray-50"
+                        >
                             <span className="text-red-500"><FaFilePdf /></span> PDF Summary
                         </button>
                     </div>
@@ -255,6 +329,7 @@ const RiwayatKehadiran = () => {
                       <th className="px-6 py-4 text-[9px] font-black text-gray-400 uppercase tracking-widest">Mata Pelajaran</th>
                       <th className="px-6 py-4 text-[9px] font-black text-gray-400 uppercase tracking-widest text-center">Status</th>
                       <th className="px-6 py-4 text-[9px] font-black text-gray-400 uppercase tracking-widest">Keterangan</th>
+                      <th className="px-6 py-4 text-[9px] font-black text-gray-400 uppercase tracking-widest text-center">Dokumen</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-50">
@@ -267,6 +342,26 @@ const RiwayatKehadiran = () => {
                         </td>
                         <td className="px-6 py-5 text-center">{getStatusBadge(log.status)}</td>
                         <td className="px-6 py-5 text-xs font-medium text-gray-500 italic">{log.reason || '-'}</td>
+                        <td className="px-6 py-5 text-center">
+                          {log.attachments && log.attachments.length > 0 ? (
+                            <button 
+                              onClick={async () => {
+                                try {
+                                  const res = await apiClient.get(`/attendance/${log.id}/document`);
+                                  if (res.data.url) window.open(res.data.url, '_blank');
+                                } catch {
+                                  alert('Gagal memuat dokumen');
+                                }
+                              }}
+                              className="p-2 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-600 hover:text-white transition-all shadow-sm"
+                              title="Lihat Surat"
+                            >
+                              <FaDownload size={14} />
+                            </button>
+                          ) : (
+                            <span className="text-gray-200">-</span>
+                          )}
+                        </td>
                       </tr>
                     ))}
                   </tbody>

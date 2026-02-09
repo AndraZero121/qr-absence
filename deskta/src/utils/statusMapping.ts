@@ -5,7 +5,9 @@ export const STATUS_BACKEND_TO_FRONTEND: Record<string, string> = {
     sick: 'Sakit',
     absent: 'Alpha',
     dinas: 'Dinas',
-    izin: 'Izin'
+    izin: 'Izin',
+    pulang: 'Pulang',
+    return: 'Pulang'
 };
 
 export const STATUS_FRONTEND_TO_BACKEND: Record<string, string> = {
@@ -15,7 +17,7 @@ export const STATUS_FRONTEND_TO_BACKEND: Record<string, string> = {
     'sakit': 'sick',
     'alpha': 'absent',
     'dinas': 'dinas',
-    'pulang': 'izin',
+    'pulang': 'return',
 
     // Title Case variants
     'Hadir': 'present',
@@ -24,15 +26,17 @@ export const STATUS_FRONTEND_TO_BACKEND: Record<string, string> = {
     'Sakit': 'sick',
     'Alpha': 'absent',
     'Dinas': 'dinas',
-    'Pulang': 'izin'
+    'Pulang': 'return'
 };
 
 export const STATUS_COLORS_HEX: Record<string, string> = {
-    present: '#1FA83D',
-    late: '#FFA500',
-    excused: '#ACA40D',
-    sick: '#520C8F',
-    absent: '#D90000',
-    dinas: '#0000FF',
-    izin: '#ACA40D'
+    present: '#10B981',
+    late: '#F59E0B',
+    excused: '#3B82F6',
+    sick: '#8B5CF6',
+    absent: '#EF4444',
+    dinas: '#6366F1',
+    izin: '#3B82F6',
+    pulang: '#F97316',
+    return: '#F97316'
 };

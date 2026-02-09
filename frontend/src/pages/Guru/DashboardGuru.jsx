@@ -1,18 +1,13 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
-  FaUser, 
   FaClock, 
   FaCalendarAlt, 
   FaBook, 
-  FaQrcode, 
   FaCheckCircle, 
-  FaSignOutAlt,
-  FaBars,
-  FaBell,
-  FaInfoCircle,
   FaChevronRight,
-  FaArrowRight
+  FaArrowRight,
+  FaBell
 } from 'react-icons/fa';
 import { Html5QrcodeScanner } from 'html5-qrcode';
 import CustomAlert from '../../components/Common/CustomAlert';
@@ -23,10 +18,9 @@ import PageWrapper from '../../components/ui/PageWrapper';
 
 function DashboardGuru() {
   const navigate = useNavigate();
-  const [sidebarOpen, setSidebarOpen] = useState(true);
   const [currentTime, setCurrentTime] = useState('');
   const [currentDate, setCurrentDate] = useState('');
-  const [userProfile, setUserProfile] = useState(null);
+  /* userProfile removed */
   const [allJadwal, setAllJadwal] = useState([]);
   const [completedAbsensi, setCompletedAbsensi] = useState(new Set());
   const [selectedSchedule, setSelectedSchedule] = useState(null);
@@ -37,16 +31,18 @@ function DashboardGuru() {
 
   // Load profile and schedule data
   useEffect(() => {
+    const controller = new AbortController();
+    
     const fetchProfile = async () => {
       try {
-        const storedUser = localStorage.getItem('user');
-        if (storedUser) setUserProfile(JSON.parse(storedUser));
+        const storedUser = localStorage.getItem('user_data');
+        if (storedUser) { /* setUserProfile removed */ }
         
-        const response = await apiClient.get('/guru/dashboard');
-        const { schedules, profile, attendance_settings } = response.data;
+        const response = await apiClient.get('/guru/dashboard', { signal: controller.signal });
+        const { schedules, attendance_settings } = response.data;
         
         setAllJadwal(schedules || []);
-        if (profile) setUserProfile(profile);
+        /* if (profile) setUserProfile(profile); */
         if (attendance_settings?.schedule_image) {
             setJadwalImage(attendance_settings.schedule_image);
         }
@@ -56,15 +52,15 @@ function DashboardGuru() {
           .map(s => s.id);
         setCompletedAbsensi(new Set(completed));
       } catch (error) {
-        console.error("Error fetching guru dashboard:", error);
-        // Fallback for demo
-        setAllJadwal([
-            { id: 1, mataPelajaran: "Informatika", kelas: "XI RPL 1", waktu: "07:00 - 08:30", jamKe: 1 },
-            { id: 2, mataPelajaran: "Basis Data", kelas: "XI RPL 2", waktu: "09:00 - 10:30", jamKe: 3 }
-        ]);
+        if (error.name !== 'AbortError') {
+          console.error("Error fetching guru dashboard:", error);
+          setAllJadwal([]);
+        }
       }
     };
     fetchProfile();
+    
+    return () => controller.abort();
   }, []);
 
   // Update time
@@ -77,13 +73,12 @@ function DashboardGuru() {
     return () => clearInterval(timer);
   }, []);
 
-  const handleLogoutClick = () => {
-    setAlertState({ show: true, type: 'confirm', title: 'Konfirmasi Keluar', message: 'Apakah Anda yakin ingin keluar?' });
-  };
+  /* handleLogoutClick removed */
 
   const handleConfirmLogout = () => {
-    localStorage.removeItem('token');
-    localStorage.removeItem('user');
+    localStorage.removeItem('auth_token');
+    localStorage.removeItem('user_data');
+    localStorage.removeItem('user_role');
     sessionStorage.clear();
     navigate('/login');
   };
@@ -102,62 +97,16 @@ function DashboardGuru() {
         qrbox: { width: 250, height: 250 },
         aspectRatio: 1.0
       });
-      scanner.render((decodedText) => {
+      scanner.render(() => {
         scanner.clear();
         setQrVerified(true);
-      }, (error) => {});
+      }, () => {});
     }, 100);
   };
 
   return (
     <PageWrapper className="flex min-h-[calc(100vh-80px)] bg-transparent font-sans">
       
-      {/* SIDEBAR */}
-      <aside className={`
-        fixed lg:sticky top-[80px] h-[calc(100vh-80px)] z-40 bg-white/95 backdrop-blur-xl border-r border-gray-200 transition-all duration-500 ease-in-out flex flex-col
-        ${sidebarOpen ? 'w-72 translate-x-0' : 'w-0 -translate-x-full lg:w-20 lg:translate-x-0'}
-      `}>
-        <button 
-            onClick={() => setSidebarOpen(!sidebarOpen)}
-            className="hidden lg:flex absolute -right-4 top-10 w-8 h-8 bg-blue-600 text-white rounded-full items-center justify-center shadow-lg hover:bg-blue-700 transition-all"
-        >
-            <FaChevronRight className={`transition-transform duration-500 ${sidebarOpen ? 'rotate-180' : 'rotate-0'}`} size={12} />
-        </button>
-
-        {/* Profile Area */}
-        <div className={`p-8 border-b border-gray-100 flex flex-col items-center transition-opacity duration-300 ${!sidebarOpen && 'lg:opacity-0 lg:pointer-events-none'}`}>
-          <div className="w-24 h-24 bg-blue-50 rounded-[2rem] flex items-center justify-center text-blue-500 mb-4 shadow-inner ring-4 ring-white">
-            <FaUser size={40} />
-          </div>
-          <h2 className="font-black text-gray-800 text-lg text-center leading-tight">{userProfile?.name || 'Guru Pengajar'}</h2>
-          <p className="text-[10px] font-black text-blue-400 uppercase tracking-widest mt-2 bg-blue-50 px-3 py-1 rounded-full">NIP: {userProfile?.username || '-'}</p>
-        </div>
-
-        {/* Navigation Info */}
-        <div className="flex-1 p-6 space-y-6 overflow-y-auto">
-            <div className={`${!sidebarOpen && 'lg:opacity-0'}`}>
-                <p className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] mb-4 px-2">Info Akademik</p>
-                <div className="space-y-3">
-                    <div className="flex items-center gap-4 p-4 bg-gray-50 text-gray-700 rounded-2xl border border-gray-100 shadow-sm">
-                        <FaInfoCircle className="text-blue-500" />
-                        <span className="text-xs font-bold whitespace-nowrap">Semester Genap 2025</span>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        {/* Logout */}
-        <div className="p-6 border-t border-gray-100 bg-gray-50/50">
-          <button 
-            onClick={handleLogoutClick}
-            className={`flex items-center gap-4 w-full px-5 py-4 text-xs font-black text-red-600 hover:bg-red-50 rounded-2xl transition-all uppercase tracking-widest ${!sidebarOpen && 'lg:justify-center'}`}
-          >
-            <FaSignOutAlt className="text-xl" />
-            <span className={`transition-opacity duration-300 ${!sidebarOpen && 'lg:hidden'}`}>Keluar</span>
-          </button>
-        </div>
-      </aside>
-
       {/* Main Content */}
       <main className="flex-1 min-w-0">
         <div className="p-6 md:p-10 lg:p-12 max-w-[1400px] mx-auto space-y-10">
