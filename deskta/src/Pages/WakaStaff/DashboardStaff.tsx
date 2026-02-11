@@ -13,6 +13,7 @@ import RekapKehadiranSiswa from "./RekapKehadiranSiswa";
 import DaftarKetidakhadiran from "./DaftarKetidakhadiran";
 import { usePopup } from "../../component/Shared/Popup/PopupProvider";
 import { dashboardService } from "../../services/dashboard";
+import { STORAGE_BASE_URL } from "../../utils/constants";
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -26,6 +27,8 @@ import {
   Filler,
 } from "chart.js";
 import { Line } from "react-chartjs-2";
+import LoadingState from "../../component/Shared/LoadingState";
+import ErrorState from "../../component/Shared/ErrorState";
 
 ChartJS.register(
   CategoryScale,
@@ -111,44 +114,93 @@ const COLORS = {
   SAKIT: "#520C8F",      // UNGU - Sakit
 };
 
+import type { WakaSummary } from "../../types/api";
+
+// ... (existing imports)
+
 export default function DashboardStaff({ user, onLogout }: DashboardStaffProps) {
   const { confirm: popupConfirm } = usePopup();
-  /* eslint-disable @typescript-eslint/no-unused-vars */
+
   const [currentPage, setCurrentPage] = useState<WakaPage>("dashboard");
   const navigate = useNavigate();
 
   // API data states
-  const [wakaSummary, setWakaSummary] = useState<any>(null);
+  const [wakaSummary, setWakaSummary] = useState<WakaSummary | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  // ... (rest of the component)
+
 
   // Fetch dashboard data
   useEffect(() => {
+    const controller = new AbortController();
+
     const fetchDashboardData = async () => {
       try {
-        const [wakaStats] = await Promise.all([
-          dashboardService.getWakaDashboardSummary(),
-        ]);
+        setIsLoading(true);
+        setError(null);
+        const wakaStats = await dashboardService.getWakaDashboardSummary({ signal: controller.signal });
         setWakaSummary(wakaStats);
-      } catch (error) {
-        console.error('Error fetching dashboard data:', error);
+      } catch (err: any) {
+        if (err.name !== 'AbortError') {
+          console.error('Error fetching dashboard data:', err);
+          setError('Gagal memuat ringkasan data Waka/Staff.');
+        }
+      } finally {
+        setIsLoading(false);
       }
     };
     fetchDashboardData();
     // Refresh every minute
     const interval = setInterval(fetchDashboardData, 60000);
-    return () => clearInterval(interval);
+    return () => {
+      controller.abort();
+      clearInterval(interval);
+    };
   }, []);
 
   const [selectedGuru, setSelectedGuru] = useState<string | null>(null);
+  const [selectedGuruId, setSelectedGuruId] = useState<string | null>(null);
+  const [selectedGuruIdentitas, setSelectedGuruIdentitas] = useState<string | null>(null);
   const [selectedKelas, setSelectedKelas] = useState<string | null>(null);
   const [selectedKelasId, setSelectedKelasId] = useState<string | null>(null);
+  const [selectedJadwalImage, setSelectedJadwalImage] = useState<string | null>(null);
   const [selectedKelasInfo, setSelectedKelasInfo] = useState<{
     namaKelas: string;
     waliKelas: string;
   } | null>(null);
+
   const [selectedSiswa, setSelectedSiswa] = useState<{
     name: string;
     identitas: string;
   } | null>(null);
+
+  const handleMenuClick = (page: string, payload?: any) => {
+    setCurrentPage(page as WakaPage);
+
+    // Handle payload untuk lihat-kelas
+    if (page === "lihat-kelas" && payload) {
+      setSelectedKelas(payload.kelas);
+      setSelectedKelasId(payload.classId);
+      setSelectedJadwalImage(payload.jadwalImage);
+    }
+
+    // Handle payload untuk lihat-guru
+    if (page === "lihat-guru" && payload) {
+      setSelectedGuru(payload.namaGuru);
+      setSelectedGuruIdentitas(payload.noIdentitas);
+      setSelectedJadwalImage(payload.jadwalImage);
+    }
+
+    // Handle payload untuk daftar-ketidakhadiran
+    if (page === "daftar-ketidakhadiran" && payload) {
+      setSelectedSiswa({
+        name: payload.siswaName,
+        identitas: payload.siswaIdentitas,
+      });
+    }
+  };
 
   const [currentDate, setCurrentDate] = useState("");
   const [currentTime, setCurrentTime] = useState("");
@@ -176,18 +228,6 @@ export default function DashboardStaff({ user, onLogout }: DashboardStaffProps) 
     const interval = setInterval(updateDateTime, 1000);
     return () => clearInterval(interval);
   }, []);
-
-  const handleMenuClick = (page: string, payload?: any) => {
-    setCurrentPage(page as WakaPage);
-
-    // Handle payload untuk daftar-ketidakhadiran
-    if (page === "daftar-ketidakhadiran" && payload) {
-      setSelectedSiswa({
-        name: payload.siswaName,
-        identitas: payload.siswaIdentitas,
-      });
-    }
-  };
 
   const handleLogout = async () => {
     if (await popupConfirm("Apakah Anda yakin ingin keluar?")) {
@@ -232,6 +272,8 @@ export default function DashboardStaff({ user, onLogout }: DashboardStaffProps) 
           <DetailGuru
             {...commonProps}
             namaGuru={selectedGuru || undefined}
+            noIdentitas={selectedGuruIdentitas || undefined}
+            jadwalImage={selectedJadwalImage ? `${STORAGE_BASE_URL}/${selectedJadwalImage}` : undefined}
             onBack={() => handleMenuClick("jadwal-guru")}
           />
         );
@@ -241,6 +283,7 @@ export default function DashboardStaff({ user, onLogout }: DashboardStaffProps) 
           <DetailKelas
             {...commonProps}
             kelas={selectedKelas || undefined}
+            jadwalImage={selectedJadwalImage ? `${STORAGE_BASE_URL}/${selectedJadwalImage}` : undefined}
             onBack={() => handleMenuClick("jadwal-kelas")}
           />
         );
@@ -270,7 +313,10 @@ export default function DashboardStaff({ user, onLogout }: DashboardStaffProps) 
         return (
           <KehadiranGuru
             {...commonProps}
-            onNavigateToDetail={() => {
+            onNavigateToDetail={(guruId: string, guruName: string, noIdentitas?: string) => {
+              setSelectedGuruId(guruId);
+              setSelectedGuru(guruName);
+              setSelectedGuruIdentitas(noIdentitas || null);
               handleMenuClick("detail-kehadiran-guru");
             }}
           />
@@ -280,6 +326,8 @@ export default function DashboardStaff({ user, onLogout }: DashboardStaffProps) 
         return (
           <DetailKehadiranGuru
             {...commonProps}
+            teacherId={selectedGuruId || undefined}
+            guruName={selectedGuru || undefined}
             onBack={() => handleMenuClick("kehadiran-guru")}
           />
         );
@@ -290,6 +338,7 @@ export default function DashboardStaff({ user, onLogout }: DashboardStaffProps) 
             {...commonProps}
             namaKelas={selectedKelasInfo?.namaKelas || "X Mekatronika 1"}
             waliKelas={selectedKelasInfo?.waliKelas || "Ewit Erniyah S.pd"}
+            classId={selectedKelasId || undefined}
             onBack={() => handleMenuClick("detail-siswa-staff")}
           />
         );
@@ -313,7 +362,7 @@ export default function DashboardStaff({ user, onLogout }: DashboardStaffProps) 
             user={user}
             onLogout={handleLogout}
           >
-            <ComingSoon title={PAGE_TITLES[currentPage]} />
+            <GuruPenggantiList />
           </StaffLayout>
         );
 
@@ -327,7 +376,23 @@ export default function DashboardStaff({ user, onLogout }: DashboardStaffProps) 
             user={user}
             onLogout={handleLogout}
           >
-            <div style={{ display: "flex", flexDirection: "column", gap: "28px", backgroundColor: "#F9FAFB", padding: "4px" }}>
+
+            <div style={{
+              display: "flex",
+              flexDirection: "column",
+              gap: "28px",
+              backgroundColor: "#F9FAFB",
+              padding: "4px",
+              minHeight: "80vh",
+            }}>
+              {/* Error Alert replaced by Conditional Rendering */}
+              {isLoading && !wakaSummary ? (
+                 <LoadingState />
+              ) : error ? (
+                 <ErrorState message={error} onRetry={() => window.location.reload()} />
+              ) : (
+                <>
+
               {/* Welcome Section */}
               <div style={{ marginBottom: "8px" }}>
                 <h2 style={{ fontSize: "24px", fontWeight: "700", color: "#111827", margin: 0 }}>
@@ -438,16 +503,18 @@ export default function DashboardStaff({ user, onLogout }: DashboardStaffProps) 
                     title="Grafik Kehadiran Bulanan"
                     subtitle="Periode Jan - Jun"
                   />
-                  <MonthlyLineChart data={wakaSummary?.trend?.map((t: any) => ({
-                    month: t.label,
-                    hadir: t.hadir,
-                    izin: t.izin,
-                    tidak_hadir: t.alpha,
-                    sakit: t.sakit,
-                    pulang: t.terlambat // Mapping 'terlambat' to 'pulang' logic for chart
+                   <MonthlyLineChart data={wakaSummary?.trend?.map((t: any) => ({
+                    month: t.month || t.label,
+                    hadir: t.present !== undefined ? t.present : t.hadir,
+                    izin: t.sick_excused !== undefined ? t.sick_excused : t.izin,
+                    tidak_hadir: t.absent !== undefined ? t.absent : t.alpha,
+                    sakit: t.sick !== undefined ? t.sick : 0,
+                    pulang: t.return !== undefined ? t.return : t.terlambat
                   })) || []} />
                 </div>
               </div>
+              </>
+              )}
             </div>
           </StaffLayout>
         );
@@ -455,6 +522,122 @@ export default function DashboardStaff({ user, onLogout }: DashboardStaffProps) 
   };
 
   return renderPage();
+}
+
+
+function GuruPenggantiList() {
+  const [loading, setLoading] = useState(true);
+  const [absentTeachers, setAbsentTeachers] = useState<any[]>([]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    const fetchAbsentTeachers = async () => {
+      try {
+        setLoading(true);
+        const { dashboardService } = await import("../../services/dashboard");
+        const today = new Date().toISOString().split('T')[0];
+        const response: any = await dashboardService.getTeachersDailyAttendance({ date: today }, { signal: controller.signal });
+        
+        const items = response.items?.data || response.items || [];
+        const absent = items.filter((item: any) => (item.status || item.attendance?.status) === 'absent');
+        setAbsentTeachers(absent);
+      } catch (err: any) {
+        if (err.name !== 'AbortError') {
+          console.error("Failed to fetch absent teachers", err);
+        }
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchAbsentTeachers();
+    return () => controller.abort();
+  }, []);
+
+  return (
+    <div style={{
+      backgroundColor: "white",
+      borderRadius: "16px",
+      padding: "24px",
+      border: "1px solid #E5E7EB",
+      boxShadow: "0 4px 6px -1px rgba(0, 0, 0, 0.1)"
+    }}>
+      <div style={{ marginBottom: "24px", borderBottom: "1px solid #F3F4F6", paddingBottom: "16px" }}>
+        <h2 style={{ fontSize: "20px", fontWeight: 700, color: "#111827", marginBottom: "4px" }}>
+          Daftar Guru Perlu Pengganti
+        </h2>
+        <p style={{ color: "#6B7280", fontSize: "14px" }}>
+          Berikut adalah daftar guru yang tidak hadir hari ini dan memerlukan guru pengganti.
+        </p>
+      </div>
+
+      {loading ? (
+        <div style={{ padding: "40px", textAlign: "center", color: "#6B7280" }}>Memuat daftar guru...</div>
+      ) : absentTeachers.length === 0 ? (
+        <div style={{ padding: "40px", textAlign: "center", color: "#6B7280", backgroundColor: "#F9FAFB", borderRadius: "8px" }}>
+          Tidak ada guru yang memerlukan pengganti hari ini. Semua guru terjadwal atau sudah hadir.
+        </div>
+      ) : (
+        <div style={{ overflowX: "auto" }}>
+          <table style={{ width: "100%", borderCollapse: "collapse" }}>
+            <thead>
+              <tr style={{ borderBottom: "1px solid #E5E7EB" }}>
+                <th style={{ textAlign: "left", padding: "12px 16px", fontSize: "12px", textTransform: "uppercase", color: "#6B7280", fontWeight: 600 }}>Nama Guru</th>
+                <th style={{ textAlign: "left", padding: "12px 16px", fontSize: "12px", textTransform: "uppercase", color: "#6B7280", fontWeight: 600 }}>NIP</th>
+                <th style={{ textAlign: "left", padding: "12px 16px", fontSize: "12px", textTransform: "uppercase", color: "#6B7280", fontWeight: 600 }}>Status</th>
+                <th style={{ textAlign: "center", padding: "12px 16px", fontSize: "12px", textTransform: "uppercase", color: "#6B7280", fontWeight: 600 }}>Aksi</th>
+              </tr>
+            </thead>
+            <tbody>
+              {absentTeachers.map((item, index) => (
+                <tr key={item.teacher?.id || index} style={{ borderBottom: "1px solid #F3F4F6", transition: "background-color 0.2s" }} 
+                  onMouseEnter={(e) => e.currentTarget.style.backgroundColor = "#F9FAFB"}
+                  onMouseLeave={(e) => e.currentTarget.style.backgroundColor = "transparent"}>
+                  <td style={{ padding: "12px 16px", fontWeight: 500, color: "#111827" }}>{item.teacher?.user?.name || item.teacher?.name || "-"}</td>
+                  <td style={{ padding: "12px 16px", color: "#4B5563" }}>{item.teacher?.nip || "-"}</td>
+                  <td style={{ padding: "12px 16px" }}>
+                    <span style={{ 
+                      backgroundColor: "#FEE2E2", 
+                      color: "#991B1B", 
+                      padding: "4px 10px", 
+                      borderRadius: "12px", 
+                      fontSize: "12px", 
+                      fontWeight: 600 
+                    }}>
+                      Alpha
+                    </span>
+                  </td>
+                  <td style={{ padding: "12px 16px", textAlign: "center" }}>
+                    <button 
+                      disabled
+                      style={{
+                        backgroundColor: "#E5E7EB",
+                        color: "#9CA3AF",
+                        border: "none",
+                        padding: "6px 12px",
+                        borderRadius: "6px",
+                        fontSize: "12px",
+                        fontWeight: 600,
+                        cursor: "not-allowed",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "6px",
+                        margin: "0 auto"
+                      }}
+                      title="Fitur ini akan segera hadir"
+                    >
+                      <span style={{ fontSize: "14px" }}>🔒</span>
+                      Segera Hadir
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
 }
 
 function SectionHeader({ title, subtitle }: { title: string; subtitle?: string }) {
@@ -691,30 +874,5 @@ function TimeRange({ label, value }: { label: string; value: string }) {
   );
 }
 
-function ComingSoon({ title }: { title: string }) {
-  return (
-    <div
-      style={{
-        backgroundColor: "white",
-        borderRadius: "12px",
-        padding: "48px 32px",
-        border: "2px dashed #E5E7EB",
-        textAlign: "center",
-      }}
-    >
-      <div style={{ fontSize: "48px", marginBottom: "16px" }}>🚀</div>
-      <h2
-        style={{
-          fontSize: "20px",
-          marginBottom: "8px",
-          color: "#111827",
-          fontWeight: 700,
-        }}
-      >
-        {title}
-      </h2>
-      <p style={{ color: "#6B7280", fontSize: "14px", margin: 0 }}>Konten masih dalam pengembangan.</p>
-    </div>
-  );
-}
+
 

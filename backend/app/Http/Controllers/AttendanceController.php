@@ -10,11 +10,12 @@ use App\Models\Schedule;
 use App\Models\StudentProfile;
 use App\Models\TeacherProfile;
 use App\Services\WhatsAppService;
-use App\Services\WhatsAppTemplates;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Symfony\Component\HttpFoundation\StreamedResponse;
@@ -60,63 +61,83 @@ class AttendanceController extends Controller
             return response()->json(['message' => 'Profil guru tidak ditemukan'], 422);
         }
 
-        if ($user->user_type === 'student') {
-            if (! $data['device_id'] ?? null) {
-                return response()->json(['message' => 'Device belum terdaftar'], 422);
+        // Check if student is on leave (cannot scan if on leave)
+        if ($user->user_type === 'student' && $user->studentProfile) {
+            $activeLeave = \App\Models\StudentLeavePermission::where('student_id', $user->studentProfile->id)
+                ->where('date', $now->toDateString())
+                ->where('status', 'active')
+                ->first();
+
+            if ($activeLeave) {
+                // Check if this schedule is during the leave period
+                if ($activeLeave->shouldHideFromAttendance($qr->schedule)) {
+                    $leaveType = match ($activeLeave->type) {
+                        'sakit' => 'Sakit',
+                        'izin' => 'Izin',
+                        'izin_pulang' => 'Izin Pulang',
+                        'dispensasi' => 'Dispensasi',
+                        default => 'Izin',
+                    };
+
+                    return response()->json([
+                        'message' => "Anda sedang dalam status {$leaveType} dan tidak dapat melakukan presensi",
+                        'leave_permission' => $activeLeave,
+                    ], 422);
+                }
             }
-
-            $device = $user->devices()->where('id', $data['device_id'])->where('active', true)->first();
-            if (! $device) {
-                return response()->json(['message' => 'Device tidak valid'], 422);
-            }
-
-            $device->update(['last_used_at' => $now]);
-        }
-
-        if ($qr->type === 'student' && $qr->schedule && $user->studentProfile && $qr->schedule->class_id !== $user->studentProfile->class_id) {
-            return response()->json(['message' => 'QR bukan untuk kelas kamu'], 403);
-        }
-
-        if ($qr->type === 'teacher' && $qr->schedule && $qr->schedule->teacher_id !== optional($user->teacherProfile)->id) {
-            return response()->json(['message' => 'QR bukan untuk guru ini'], 403);
         }
 
         $attributes = [
             'attendee_type' => $user->user_type,
+            'student_id' => $user->user_type === 'student' ? $user->studentProfile->id : null,
+            'teacher_id' => $user->user_type === 'teacher' ? $user->teacherProfile->id : null,
             'schedule_id' => $qr->schedule_id,
-            'student_id' => $user->studentProfile->id ?? null,
-            'teacher_id' => $user->teacherProfile->id ?? null,
         ];
 
-        $existing = Attendance::where($attributes)->first();
-        if ($existing) {
-            return response()->json([
-                'message' => 'Presensi sudah tercatat',
-                'attendance' => $existing->load(['student.user:id,name', 'teacher.user:id,name', 'schedule:id,class_id,teacher_id,subject_name,date,start_time,end_time,room']),
-            ]);
-        }
+        $lockKey = "attendance_scan_{$user->id}_{$qr->schedule_id}_{$now->toDateString()}";
 
-        $attendance = Attendance::create([
-            ...$attributes,
-            'date' => $now,
-            'qrcode_id' => $qr->id,
-            'status' => $this->determineStatus($qr->schedule, $now), // Use strict status check
-            'checked_in_at' => $now,
-            'source' => 'qrcode',
-        ]);
+        // Prevent race conditions with atomic lock
+        return Cache::lock($lockKey, 10)->block(5, function () use ($attributes, $now, $qr, $user) {
+            return DB::transaction(function () use ($attributes, $now, $qr, $user) {
+                if ($user->user_type === 'student') {
+                    $user->devices()->where('id', request('device_id'))->where('active', true)->update(['last_used_at' => $now]);
+                }
 
-        // dispatch event after creation to ensure ID is available
-        AttendanceRecorded::dispatch($attendance);
+                $existing = Attendance::where($attributes)
+                    ->whereDate('date', $now->toDateString())
+                    ->lockForUpdate()
+                    ->first();
 
-        Log::info('attendance.recorded', [
-            'attendance_id' => $attendance->id,
-            'schedule_id' => $attendance->schedule_id,
-            'user_id' => $user->id,
-            'attendee_type' => $attendance->attendee_type,
-            'status' => $attendance->status
-        ]);
+                if ($existing) {
+                    return response()->json([
+                        'message' => 'Presensi sudah tercatat',
+                        'attendance' => new \App\Http\Resources\AttendanceResource($existing->load(['student.user', 'teacher.user', 'schedule.class'])),
+                    ]);
+                }
 
-        return response()->json($attendance->load(['student.user:id,name', 'teacher.user:id,name', 'schedule:id,class_id,teacher_id,subject_name,date,start_time,end_time,room']));
+                $attendance = Attendance::create([
+                    ...$attributes,
+                    'date' => $now,
+                    'qrcode_id' => $qr->id,
+                    'status' => $this->determineStatus($qr->schedule, $now), // Use strict status check
+                    'checked_in_at' => $now,
+                    'source' => 'qrcode',
+                ]);
+
+                // dispatch event after creation to ensure ID is available
+                AttendanceRecorded::dispatch($attendance);
+
+                Log::info('attendance.recorded', [
+                    'attendance_id' => $attendance->id,
+                    'schedule_id' => $attendance->schedule_id,
+                    'user_id' => $user->id,
+                    'attendee_type' => $attendance->attendee_type,
+                    'status' => $attendance->status,
+                ]);
+
+                return response()->json(new \App\Http\Resources\AttendanceResource($attendance->loadMissing(['student.user', 'teacher.user', 'schedule.class'])));
+            });
+        });
     }
 
     /**
@@ -124,19 +145,22 @@ class AttendanceController extends Controller
      */
     private function determineStatus($schedule, $checkInTime): string
     {
-        if (!$schedule || !$schedule->start_time) return 'present';
+        if (! $schedule || ! $schedule->start_time) {
+            return 'present';
+        }
 
         $startTime = Carbon::parse($schedule->start_time);
-        
+
         // Use today's date combined with schedule time for comparison
         $scheduledDateTime = Carbon::createFromTime(
-            $startTime->hour, 
-            $startTime->minute, 
+            $startTime->hour,
+            $startTime->minute,
             $startTime->second
         );
 
-        // Grace period: 15 minutes
-        $lateThreshold = $scheduledDateTime->copy()->addMinutes(15);
+        // Grace period from settings
+        $gracePeriod = (int) (\App\Models\Setting::where('key', 'grace_period')->value('value') ?? 15);
+        $lateThreshold = $scheduledDateTime->copy()->addMinutes($gracePeriod);
 
         if ($checkInTime->gt($lateThreshold)) {
             return 'late';
@@ -157,21 +181,57 @@ class AttendanceController extends Controller
             return response()->json(['message' => 'Unauthorized'], 403);
         }
 
+        $now = now();
+        $today = $now->toDateString();
+
         // 2. Get all students in the class
         $students = StudentProfile::where('class_id', $schedule->class_id)->get();
 
         // 3. Get existing attendance for this schedule today
         $existingStudentIds = Attendance::where('schedule_id', $schedule->id)
             ->where('attendee_type', 'student')
-            ->whereDate('date', now())
+            ->whereDate('date', $today)
             ->pluck('student_id')
             ->toArray();
 
+        // 4. Get students on leave today
+        $leavePermissions = \App\Models\StudentLeavePermission::where('class_id', $schedule->class_id)
+            ->where('date', $today)
+            ->where('status', 'active')
+            ->get()
+            ->keyBy('student_id');
+
         $absentCount = 0;
-        $now = now();
+        $onLeaveCount = 0;
 
         foreach ($students as $student) {
-            if (!in_array($student->id, $existingStudentIds)) {
+            if (in_array($student->id, $existingStudentIds)) {
+                continue;
+            }
+
+            // Check if student is on leave
+            $leavePermission = $leavePermissions->get($student->id);
+
+            if ($leavePermission && $leavePermission->shouldHideFromAttendance($schedule)) {
+                // Student is on leave - create attendance with leave status
+                $status = match ($leavePermission->type) {
+                    'sakit' => 'sick',
+                    'izin', 'izin_pulang', 'dispensasi' => 'izin',
+                    default => 'izin',
+                };
+
+                Attendance::create([
+                    'attendee_type' => 'student',
+                    'student_id' => $student->id,
+                    'schedule_id' => $schedule->id,
+                    'date' => $now,
+                    'status' => $status,
+                    'source' => 'system_close',
+                    'reason' => $leavePermission->reason ?? ('Otomatis: '.$this->getLeaveTypeLabel($leavePermission->type)),
+                ]);
+                $onLeaveCount++;
+            } else {
+                // Student is not on leave and hasn't scanned - mark as absent
                 Attendance::create([
                     'attendee_type' => 'student',
                     'student_id' => $student->id,
@@ -179,16 +239,31 @@ class AttendanceController extends Controller
                     'date' => $now,
                     'status' => 'absent', // Alpha
                     'source' => 'system_close', // Mark as system generated
-                    'reason' => 'Tidak melakukan scan presensi'
+                    'reason' => 'Tidak melakukan scan presensi',
                 ]);
                 $absentCount++;
             }
         }
 
         return response()->json([
-            'message' => "Absensi ditutup. {$absentCount} siswa ditandai Alpha.",
-            'absent_count' => $absentCount
+            'message' => "Absensi ditutup. {$absentCount} siswa ditandai Alpha, {$onLeaveCount} siswa izin/sakit.",
+            'absent_count' => $absentCount,
+            'on_leave_count' => $onLeaveCount,
         ]);
+    }
+
+    /**
+     * Get leave type label in Indonesian
+     */
+    private function getLeaveTypeLabel(string $type): string
+    {
+        return match ($type) {
+            'sakit' => 'Sakit',
+            'izin' => 'Izin',
+            'izin_pulang' => 'Izin Pulang',
+            'dispensasi' => 'Dispensasi',
+            default => $type,
+        };
     }
 
     public function me(Request $request): JsonResponse
@@ -211,14 +286,14 @@ class AttendanceController extends Controller
 
         if ($request->filled('status')) {
             $request->validate([
-                'status' => ['in:present,late,excused,sick,absent,dinas,izin'],
+                'status' => ['in:present,late,excused,sick,absent,dinas,izin,return'],
             ]);
             $query->where('status', $request->string('status'));
         }
 
         $attendances = $query->latest('date')->paginate();
 
-        return response()->json($attendances);
+        return \App\Http\Resources\AttendanceResource::collection($attendances)->response();
     }
 
     public function summaryMe(Request $request): JsonResponse
@@ -270,7 +345,7 @@ class AttendanceController extends Controller
         $request->validate([
             'from' => ['nullable', 'date'],
             'to' => ['nullable', 'date'],
-            'status' => ['nullable', 'in:present,late,excused,sick,absent,dinas,izin'],
+            'status' => ['nullable', 'in:present,late,excused,sick,absent,dinas,izin,return'],
         ]);
 
         $teacherId = $request->user()->teacherProfile->id;
@@ -292,7 +367,7 @@ class AttendanceController extends Controller
             $query->where('status', $request->string('status'));
         }
 
-        return response()->json($query->latest('date')->paginate());
+        return \App\Http\Resources\AttendanceResource::collection($query->latest('date')->paginate())->response();
     }
 
     public function summaryTeaching(Request $request): JsonResponse
@@ -592,11 +667,11 @@ class AttendanceController extends Controller
         $request->validate([
             'from' => ['nullable', 'date'],
             'to' => ['nullable', 'date'],
-            'status' => ['nullable', 'in:present,late,excused,sick,absent,dinas,izin'],
+            'status' => ['nullable', 'in:present,late,excused,sick,absent,dinas,izin,return'],
         ]);
 
         $query = Attendance::query()
-            ->with(['student.user:id,name', 'schedule:id,title,subject_name'])
+            ->with(['student.user:id,name', 'schedule:id,title,subject_name', 'attachments'])
             ->where('attendee_type', 'student')
             ->whereHas('schedule', function ($q) use ($class): void {
                 $q->where('class_id', $class->id);
@@ -738,51 +813,22 @@ class AttendanceController extends Controller
         ]);
     }
 
-    public function manual(Request $request): JsonResponse
+    public function manual(\App\Http\Requests\StoreManualAttendanceRequest $request): JsonResponse
     {
+        // Data already validated and normalized in Form Request
         $dto = \App\Data\ManualAttendanceData::fromRequest($request);
-        
-        // Input Normalization/Mapping for Frontend Compatibility
-        $input = $request->all();
-        if (isset($input['status'])) {
-            $map = [
-                'alpha' => 'absent',
-                'tanpa-keterangan' => 'absent',
-                'pulang' => 'excused', // Changed from izin to excused
-                'hadir' => 'present',
-                'sakit' => 'sick',
-                'izin' => 'excused', // Changed from izin to excused
-                'terlambat' => 'late',
-            ];
-            if (isset($map[$input['status']])) {
-                $input['status'] = $map[$input['status']];
-                $request->merge(['status' => $input['status']]);
-                // Update DTO manually since it was already created
-                $dto->status = $input['status'];
-            }
-        }
-
-        $request->validate([
-            'attendee_type' => ['required', 'in:student,teacher'],
-            'student_id' => ['nullable', 'exists:student_profiles,id'],
-            'teacher_id' => ['nullable', 'exists:teacher_profiles,id'],
-            'schedule_id' => ['required', 'exists:schedules,id'],
-            'status' => ['required', 'in:present,late,excused,sick,absent,dinas,izin'],
-            'date' => ['required', 'date'],
-            'reason' => ['nullable', 'string'],
-        ]);
 
         // Authorization Check
         $user = $request->user();
         if ($user->user_type === 'teacher') {
             $schedule = Schedule::find($dto->schedule_id);
-            if (!$schedule || $schedule->teacher_id !== $user->teacherProfile->id) {
-                 // Allow if homeroom teacher?
-                 $student = StudentProfile::find($dto->student_id);
-                 $homeroomId = $user->teacherProfile->homeroom_class_id;
-                 if (!$student || $student->class_id !== $homeroomId) {
-                     abort(403, 'Anda tidak memiliki akses untuk mengubah absensi ini.');
-                 }
+            if (! $schedule || $schedule->teacher_id !== $user->teacherProfile->id) {
+                // Allow if homeroom teacher?
+                $student = StudentProfile::find($dto->student_id);
+                $homeroomId = $user->teacherProfile->homeroom_class_id;
+                if (! $student || $student->class_id !== $homeroomId) {
+                    abort(403, 'Anda tidak memiliki akses untuk mengubah absensi ini.');
+                }
             }
         }
 
@@ -804,15 +850,7 @@ class AttendanceController extends Controller
         $existing = Attendance::where($attributes)->first();
 
         if ($existing) {
-            $existing->update([
-                'status' => $dto->status,
-                'reason' => $dto->reason ?? null,
-                'date' => $dto->date,
-                'checked_in_at' => $existing->checked_in_at ?? $dto->date,
-                'source' => 'manual',
-            ]);
-
-            return response()->json($existing->load(['student.user:id,name', 'teacher.user:id,name', 'schedule:id,class_id,teacher_id,subject_name']));
+            abort(409, 'Presensi siswa ini sudah tercatat untuk sesi ini.');
         }
 
         $attendance = Attendance::create([
@@ -824,7 +862,7 @@ class AttendanceController extends Controller
             'source' => 'manual',
         ]);
 
-        return response()->json($attendance->load(['student.user:id,name', 'teacher.user:id,name', 'schedule:id,class_id,teacher_id,subject_name']), 201);
+        return response()->json(new \App\Http\Resources\AttendanceResource($attendance->load(['student.user', 'teacher.user', 'schedule.class'])), 201);
     }
 
     public function wakaSummary(Request $request): JsonResponse
@@ -880,47 +918,84 @@ class AttendanceController extends Controller
         $request->validate([
             'from' => ['nullable', 'date'],
             'to' => ['nullable', 'date'],
-            'status' => ['nullable', 'in:present,late,excused,sick,absent,dinas,izin'],
+            'status' => ['nullable', 'in:present,late,excused,sick,absent,dinas,izin,return'],
             'class_id' => ['nullable', 'exists:classes,id'],
         ]);
 
-        $query = Attendance::query()
-            ->with(['student.user', 'schedule.class'])
+        // 1. Build Query for Students with aggregated absence count
+        $studentQuery = StudentProfile::query()
+            ->with(['user']);
+
+        if ($request->filled('class_id')) {
+            $studentQuery->where('class_id', $request->integer('class_id'));
+        }
+
+        // Apply filter logic to the count
+        $studentQuery->withCount(['attendances' => function ($q) use ($request) {
+            $q->where('attendee_type', 'student');
+
+            if ($request->filled('from')) {
+                $q->whereDate('date', '>=', $request->date('from'));
+            }
+            if ($request->filled('to')) {
+                $q->whereDate('date', '<=', $request->date('to'));
+            }
+            if ($request->filled('status')) {
+                $q->where('status', $request->string('status'));
+            } else {
+                $q->where('status', '!=', 'present');
+            }
+
+            if ($request->filled('class_id')) {
+                $q->whereHas('schedule', function ($sq) use ($request) {
+                    $sq->where('class_id', $request->integer('class_id'));
+                });
+            }
+        }]);
+
+        // Sort by absences count descending (using database index if possible)
+        $studentQuery->orderBy('attendances_count', 'desc');
+
+        // Paginate students
+        $perPage = $this->resolvePerPage($request) ?? 15;
+        $students = $studentQuery->paginate($perPage);
+        $studentIds = $students->pluck('id')->all();
+
+        // 2. Fetch detailed attendance records for these students only
+        $attendanceQuery = Attendance::query()
+            ->with(['schedule.class', 'student.user'])
+            ->whereIn('student_id', $studentIds)
             ->where('attendee_type', 'student');
 
         if ($request->filled('from')) {
-            $query->whereDate('date', '>=', $request->date('from'));
+            $attendanceQuery->whereDate('date', '>=', $request->date('from'));
         }
-
         if ($request->filled('to')) {
-            $query->whereDate('date', '<=', $request->date('to'));
+            $attendanceQuery->whereDate('date', '<=', $request->date('to'));
         }
-
         if ($request->filled('status')) {
-            $query->where('status', $request->string('status'));
+            $attendanceQuery->where('status', $request->string('status'));
         } else {
-            $query->where('status', '!=', 'present');
+            $attendanceQuery->where('status', '!=', 'present');
         }
-
         if ($request->filled('class_id')) {
-            $classId = $request->integer('class_id');
-            $query->whereHas('schedule', function ($q) use ($classId): void {
-                $q->where('class_id', $classId);
-            });
+            $attendanceQuery->whereHas('schedule', fn ($q) => $q->where('class_id', $request->integer('class_id')));
         }
 
-        $items = $query->orderBy('date')->get()->groupBy('student_id');
+        $attendances = $attendanceQuery->orderBy('date')->get()->groupBy('student_id');
 
-        $response = $items->map(function ($rows): array {
-            $student = optional($rows->first())->student;
-
+        // 3. Map students to response format
+        $items = $students->getCollection()->map(function ($student) use ($attendances) {
             return [
-                'student' => $student ? $student->loadMissing('user') : null,
-                'items' => $rows->values(),
+                'student' => $student->loadMissing('user'),
+                'items' => $attendances->get($student->id, collect())->values(),
+                'total_absences' => $student->attendances_count, // Bonus info
             ];
-        })->values();
+        });
 
-        return response()->json($response);
+        $students->setCollection($items);
+
+        return response()->json($students);
     }
 
     public function recap(Request $request): JsonResponse
@@ -995,6 +1070,34 @@ class AttendanceController extends Controller
 
     public function getDocument(Request $request, Attendance $attendance): JsonResponse
     {
+        $user = $request->user();
+
+        // 🛡️ IDOR Protection
+        $isAuthorized = false;
+
+        if ($user->user_type === 'admin') {
+            $isAuthorized = true;
+        } elseif ($user->user_type === 'teacher') {
+            $teacherProfile = $user->teacherProfile;
+            if ($teacherProfile) {
+                // Authorized if they are the teacher for the schedule OR if they are the homeroom teacher for the student
+                $isAuthorized = ($attendance->schedule && $attendance->schedule->teacher_id == $teacherProfile->id) ||
+                                ($attendance->student && $attendance->student->class_id == $teacherProfile->homeroom_class_id);
+
+                // Also allow if it's the teacher's OWN attendance record
+                if ($attendance->attendee_type === 'teacher' && $attendance->teacher_id == $teacherProfile->id) {
+                    $isAuthorized = true;
+                }
+            }
+        } elseif ($user->user_type === 'student') {
+            // Authorized only if it's their own attendance
+            $isAuthorized = ($attendance->student_id == $user->studentProfile?->id);
+        }
+
+        if (! $isAuthorized) {
+            abort(403, 'Unauthorized access to document');
+        }
+
         $attachment = $attendance->attachments()->latest()->first();
 
         if (! $attachment) {
@@ -1007,6 +1110,44 @@ class AttendanceController extends Controller
             'mime_type' => $attachment->mime_type,
             'original_name' => $attachment->original_name,
         ]);
+    }
+
+    public function proxyDocument(Request $request, string $path): \Symfony\Component\HttpFoundation\BinaryFileResponse
+    {
+        $attachment = \App\Models\AttendanceAttachment::where('path', $path)->firstOrFail();
+        $attendance = $attachment->attendance;
+        $user = $request->user();
+
+        // 🛡️ IDOR Protection (Same logic as getDocument)
+        $isAuthorized = false;
+        if ($user->user_type === 'admin') {
+            $isAuthorized = true;
+        } elseif ($user->user_type === 'teacher') {
+            $teacherProfile = $user->teacherProfile;
+            if ($teacherProfile) {
+                // Authorized if they are the teacher for the schedule OR if they are the homeroom teacher for the student
+                $isAuthorized = ($attendance->schedule && $attendance->schedule->teacher_id == $teacherProfile->id) ||
+                                ($attendance->student && $attendance->student->class_id == $teacherProfile->homeroom_class_id);
+
+                // Also allow if it's the teacher's OWN attendance record
+                if ($attendance->attendee_type === 'teacher' && $attendance->teacher_id == $teacherProfile->id) {
+                    $isAuthorized = true;
+                }
+            }
+        } elseif ($user->user_type === 'student') {
+            // Authorized only if it's their own attendance
+            $isAuthorized = ($attendance->student_id == $user->studentProfile?->id);
+        }
+
+        if (! $isAuthorized) {
+            abort(403, 'Unauthorized access to document');
+        }
+
+        if (! Storage::exists($path)) {
+            abort(404);
+        }
+
+        return response()->file(Storage::path($path));
     }
 
     protected function storeAttachment(UploadedFile $file): string
@@ -1026,9 +1167,12 @@ class AttendanceController extends Controller
     protected function signedUrl(string $path): string
     {
         try {
+            // Check if disk supports temporary URLs (usually S3)
             return Storage::temporaryUrl($path, now()->addMinutes(10));
         } catch (\Throwable $e) {
-            return Storage::url($path);
+            // Fallback to a secured API proxy route instead of a public URL
+            // This ensures IDOR protection even if temporary URLs aren't supported
+            return route('attendance.document.proxy', ['path' => $path]);
         }
     }
 
@@ -1053,7 +1197,63 @@ class AttendanceController extends Controller
         $perPage = $this->resolvePerPage($request);
         $attendances = $perPage ? $query->paginate($perPage) : $query->get();
 
-        return response()->json($attendances);
+        if ($perPage) {
+            return \App\Http\Resources\AttendanceResource::collection($attendances)->response();
+        }
+
+        return response()->json(\App\Http\Resources\AttendanceResource::collection($attendances));
+    }
+
+    public function bulkManual(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'schedule_id' => ['required', 'exists:schedules,id'],
+            'date' => ['required', 'date'],
+            'items' => ['required', 'array'],
+            'items.*.student_id' => ['required', 'exists:student_profiles,id'],
+            'items.*.status' => ['required', 'string'],
+        ]);
+
+        $schedule = Schedule::findOrFail($data['schedule_id']);
+        $this->authorizeSchedule($request, $schedule);
+
+        $date = $data['date'];
+        $results = [];
+
+        DB::transaction(function () use ($data, $date, $schedule, &$results) {
+            foreach ($data['items'] as $item) {
+                // Normalize status
+                $status = $item['status'];
+                $map = [
+                    'hadir' => 'present',
+                    'sakit' => 'sick',
+                    'izin' => 'excused',
+                    'terlambat' => 'late',
+                    'alpha' => 'absent',
+                    'pulang' => 'return',
+                ];
+                $status = $map[$status] ?? $status;
+
+                $attendance = Attendance::updateOrCreate(
+                    [
+                        'student_id' => $item['student_id'],
+                        'schedule_id' => $schedule->id,
+                        'date' => $date,
+                    ],
+                    [
+                        'status' => $status,
+                        'attendee_type' => 'student',
+                        'checked_in_at' => now(),
+                        'source' => 'manual',
+                    ]
+                );
+                $results[] = $attendance;
+            }
+        });
+
+        return response()->json([
+            'message' => count($results).' data kehadiran berhasil disimpan',
+        ]);
     }
 
     public function markExcuse(Request $request, Attendance $attendance): JsonResponse
@@ -1064,20 +1264,22 @@ class AttendanceController extends Controller
 
         // Input Normalization
         $status = $request->input('status');
-                    $map = [
-                        'alpha' => 'absent',
-                        'tanpa-keterangan' => 'absent',
-                        'pulang' => 'excused',
-                        'hadir' => 'present',
-                        'sakit' => 'sick',
-                        'izin' => 'excused',
-                        'terlambat' => 'late',
-                    ];        if (isset($map[$status])) {
+        $map = [
+            'alpha' => 'absent',
+            'tanpa-keterangan' => 'absent',
+            'pulang' => 'return',
+            'hadir' => 'present',
+            'sakit' => 'sick',
+            'izin' => 'excused',
+            'terlambat' => 'late',
+        ];
+
+        if (isset($map[$status])) {
             $request->merge(['status' => $map[$status]]);
         }
 
         $data = $request->validate([
-            'status' => ['required', 'in:present,late,excused,sick,absent,dinas,izin'],
+            'status' => ['required', 'in:present,late,excused,sick,absent,dinas,izin,return'],
             'reason' => ['nullable', 'string'],
         ]);
 
@@ -1164,7 +1366,7 @@ class AttendanceController extends Controller
             ->where('attendee_type', 'student');
 
         if ($request->filled('class_id')) {
-            $query->whereHas('schedule', fn($q) => $q->where('class_id', $request->class_id));
+            $query->whereHas('schedule', fn ($q) => $q->where('class_id', $request->class_id));
         }
 
         if ($request->filled('date')) {
@@ -1177,6 +1379,7 @@ class AttendanceController extends Controller
         $date = $request->date ?? now()->toDateString();
 
         $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadView('pdf.attendance_report', compact('attendances', 'date'));
+
         return $pdf->download('attendance_report.pdf');
     }
 

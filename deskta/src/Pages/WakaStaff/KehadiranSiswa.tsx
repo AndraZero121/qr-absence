@@ -2,6 +2,10 @@ import { useEffect, useMemo, useState } from "react";
 import StaffLayout from "../../component/WakaStaff/StaffLayout";
 import { Table } from "../../component/Shared/Table";
 
+import LoadingState from "../../component/Shared/LoadingState";
+import ErrorState from "../../component/Shared/ErrorState";
+import { isCancellation } from "../../utils/errorHelpers";
+
 interface KelasRow {
   id: string;
   tingkat: "10" | "11" | "12";
@@ -41,14 +45,49 @@ export default function KehadiranSiswa({
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
   const [selectedJurusan, setSelectedJurusan] = useState("");
   const [selectedKelas, setSelectedKelas] = useState("");
-
-  // Data kosong (menunggu integrasi backend)
-  const [kelasData] = useState<KelasRow[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [kelasData, setKelasData] = useState<KelasRow[]>([]);
 
   useEffect(() => {
     const handleResize = () => setIsMobile(window.innerWidth < 768);
     window.addEventListener("resize", handleResize);
     return () => window.removeEventListener("resize", handleResize);
+  }, []);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    const fetchData = async () => {
+      setLoading(true);
+      try {
+        const { classService } = await import("../../services/class");
+
+
+        const classes = await classService.getClasses({ signal: controller.signal });
+
+        const mappedData: KelasRow[] = (classes as any).map((c: any) => {
+          return {
+            id: c.id.toString(),
+            tingkat: (c.grade || "10") as any,
+            namaKelas: c.name || `${c.grade} ${c.label}`,
+            namaJurusan: c.major?.name || "-",
+            waliKelas: c.homeroom_teacher?.user?.name || "-",
+          };
+        });
+
+        setKelasData(mappedData);
+      } catch (error: any) {
+        if (!isCancellation(error)) {
+          console.error("Failed to fetch classes", error);
+          setError("Gagal memuat data kelas. Silakan coba lagi.");
+        }
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchData();
+    return () => controller.abort();
   }, []);
 
   // Filter data sesuai jurusan & kelas
@@ -150,13 +189,19 @@ export default function KehadiranSiswa({
         </div>
 
         {/* Tabel */}
-        <Table
-          columns={columns}
-          data={filteredData}
-          onView={handleViewDetail}
-          keyField="id"
-          emptyMessage="Belum ada data kelas."
-        />
+        {loading ? (
+             <LoadingState />
+        ) : error ? (
+             <ErrorState message={error} onRetry={() => window.location.reload()} />
+        ) : (
+          <Table
+            columns={columns}
+            data={filteredData}
+            onView={handleViewDetail}
+            keyField="id"
+            emptyMessage="Belum ada data kelas."
+          />
+        )}
       </div>
     </StaffLayout>
   );

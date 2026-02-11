@@ -21,7 +21,10 @@ export interface Student {
     class_room?: {
         id: number;
         name: string;
-        major: string;
+        major: {
+            id: number;
+            name: string;
+        };
     };
 }
 
@@ -39,6 +42,14 @@ export const studentService = {
             return response.data;
         }
         return [];
+    },
+
+    /**
+     * Get a student by ID
+     */
+    async getStudentById(id: string | number): Promise<Student> {
+        const response = await apiClient.get(`${API_ENDPOINTS.STUDENTS}/${id}`);
+        return response.data.data || response.data;
     },
 
     /**
@@ -62,5 +73,13 @@ export const studentService = {
      */
     async deleteStudent(id: string | number): Promise<void> {
         await apiClient.delete(`${API_ENDPOINTS.STUDENTS}/${id}`);
+    },
+
+    /**
+     * Import multiple students
+     */
+    async importStudents(items: any[]): Promise<{ created: number, students: Student[] }> {
+        const response = await apiClient.post(`${API_ENDPOINTS.STUDENTS}/import`, { items });
+        return response.data;
     }
 };

@@ -59,24 +59,53 @@ class QrCodeController extends Controller
             if ($data['type'] !== 'student') {
                 abort(422, 'Pengurus kelas hanya boleh membuat QR siswa');
             }
+
+            // Limit period: Officer can only generate for TODAY
+            $today = now()->format('l'); // Monday, Tuesday...
+            if (strcasecmp($schedule->day, $today) !== 0) {
+                abort(422, 'Pengurus kelas hanya boleh membuat QR untuk jadwal hari ini ('.$today.')');
+            }
         }
+
         $expiresAt = now()->addMinutes($data['expires_in_minutes'] ?? 15);
 
-        $qr = Qrcode::create([
-            'token' => Str::uuid()->toString(),
-            'type' => $data['type'],
-            'schedule_id' => $schedule->id,
-            'issued_by' => $request->user()->id,
-            'status' => 'available',
-            'expires_at' => $expiresAt,
-            'is_active' => true,
-        ]);
+        // Prevent concurrent active QR generation
+        $qr = \Illuminate\Support\Facades\DB::transaction(function () use ($schedule, $data, $request, $expiresAt) {
+            // Check for existing active QR for this schedule with lock
+            $existing = Qrcode::where('schedule_id', $schedule->id)
+                ->where('type', $data['type'])
+                ->where('is_active', true)
+                ->lockForUpdate()
+                ->first();
+
+            if ($existing) {
+                // If exists and valid, return it or expire it?
+                // Plan says: "prevent multiple active".
+                // If one exists, we can return it if it's not expired, or revoke it and create new?
+                // Let's assume we return the existing one if valid, to be idempotent.
+                if (! $existing->isExpired()) {
+                    return $existing;
+                }
+                // If expired but marked active, deactivate it
+                $existing->update(['is_active' => false, 'status' => 'expired']);
+            }
+
+            return Qrcode::create([
+                'token' => Str::uuid()->toString(),
+                'type' => $data['type'],
+                'schedule_id' => $schedule->id,
+                'issued_by' => $request->user()->id,
+                'status' => 'available',
+                'expires_at' => $expiresAt,
+                'is_active' => true,
+            ]);
+        });
 
         $payload = [
             'token' => $qr->token,
             'type' => $qr->type,
             'schedule_id' => $qr->schedule_id,
-            'expires_at' => $expiresAt->toIso8601String(),
+            'expires_at' => $qr->expires_at->toIso8601String(),
         ];
 
         Log::info('qrcode.generated', [
@@ -116,6 +145,18 @@ class QrCodeController extends Controller
                 'end_time' => $schedule->end_time ?? null,
             ],
         ], 201);
+    }
+
+    public function show(string $token): JsonResponse
+    {
+        $qr = Qrcode::with(['schedule.class', 'schedule.teacher.user', 'issuer'])->where('token', $token)->firstOrFail();
+
+        // Auto-expire if time passed
+        if ($qr->is_active && $qr->isExpired()) {
+            $qr->update(['is_active' => false, 'status' => 'expired']);
+        }
+
+        return response()->json($qr);
     }
 
     public function revoke(Request $request, string $token): JsonResponse

@@ -2,7 +2,7 @@
 import GuruLayout from '../../component/Guru/GuruLayout.tsx';
 import CalendarIcon from '../../assets/Icon/calender.png';
 import { Modal } from '../../component/Shared/Modal';
-import { usePopup } from "../../component/Shared/Popup/PopupProvider";
+
 
 interface InputManualGuruProps {
   user: { name: string; role: string };
@@ -11,7 +11,7 @@ interface InputManualGuruProps {
   onMenuClick: (page: string) => void;
 }
 
-import { STATUS_BACKEND_TO_FRONTEND, STATUS_COLORS_HEX, STATUS_FRONTEND_TO_BACKEND } from '../../utils/statusMapping';
+import { STATUS_BACKEND_TO_FRONTEND, STATUS_COLORS_HEX } from '../../utils/statusMapping';
 
 interface Siswa {
   id: string;
@@ -85,11 +85,11 @@ export default function InputManualGuru({
   currentPage,
   onMenuClick,
 }: InputManualGuruProps) {
-  const { alert: popupAlert } = usePopup();
+
   // State for Schedule & Students
   const [selectedKelas, setSelectedKelas] = useState('Memuat...');
   const [selectedMapel, setSelectedMapel] = useState('Memuat...');
-  const [activeScheduleId, setActiveScheduleId] = useState<string | null>(null);
+
 
   const [currentDate, setCurrentDate] = useState(() => {
     const d = new Date();
@@ -108,7 +108,7 @@ export default function InputManualGuru({
 
         if (schedules.length > 0) {
           const schedule = schedules[0];
-          setActiveScheduleId(schedule.id.toString());
+          // setActiveScheduleId(schedule.id.toString());
           setSelectedKelas(schedule.class?.name || 'Kelas');
           setSelectedMapel(schedule.subject_name || schedule.title || 'Mapel');
 
@@ -157,6 +157,7 @@ export default function InputManualGuru({
     setSiswaList(siswaList.map((s) => (s.id === id ? { ...s, status } : s)));
   };
 
+  /*
   const handleStatusClick = (siswa: Siswa, e: React.MouseEvent) => {
     e.stopPropagation();
     if (siswa.status === null) return;
@@ -166,6 +167,7 @@ export default function InputManualGuru({
     setEditKeterangan(siswa.keterangan || '');
     setIsModalOpen(true);
   };
+  */
 
   const handleSaveEdit = () => {
     if (!selectedSiswa || !editStatus) return;
@@ -241,7 +243,6 @@ export default function InputManualGuru({
 
     return (
       <div
-        onClick={(e) => handleStatusClick(siswa, e)}
         style={{
           display: "inline-flex",
           alignItems: "center",
@@ -254,24 +255,13 @@ export default function InputManualGuru({
           fontWeight: 600,
           color: "#FFFFFF",
           backgroundColor: color,
-          cursor: "pointer",
+          cursor: "default",
           transition: "all 0.2s ease",
           border: "none",
           boxShadow: "0 2px 4px rgba(0, 0, 0, 0.1)",
           minHeight: "36px",
         }}
-        onMouseEnter={(e) => {
-          e.currentTarget.style.opacity = "0.9";
-          e.currentTarget.style.transform = "translateY(-1px)";
-          e.currentTarget.style.boxShadow = "0 4px 8px rgba(0, 0, 0, 0.15)";
-        }}
-        onMouseLeave={(e) => {
-          e.currentTarget.style.opacity = "1";
-          e.currentTarget.style.transform = "translateY(0)";
-          e.currentTarget.style.boxShadow = "0 2px 4px rgba(0, 0, 0, 0.1)";
-        }}
       >
-        <EyeIcon size={14} />
         <span>{label}</span>
       </div>
     );
@@ -799,7 +789,7 @@ export default function InputManualGuru({
                     e.currentTarget.style.opacity = "1";
                   }}
                 >
-                  {editStatus === 'hadir' ? 'Simpan Keterangan' : 'Simpan Perubahan'}
+                  {editStatus === 'present' ? 'Simpan Keterangan' : 'Simpan Perubahan'}
                 </button>
               </div>
             </div>

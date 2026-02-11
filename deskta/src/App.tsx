@@ -15,6 +15,7 @@ import DashboardPengurusKelas from "./Pages/PengurusKelas/DashboardPengurusKelas
 import DashboardWalliKelas from "./Pages/WaliKelas/DashboardWalliKelas";
 import { SmoothScroll } from "./component/Shared/SmoothScroll";
 import { PopupProvider } from "./component/Shared/Popup/PopupProvider";
+import { storage } from "./utils/storage";
 // import { SmoothScroll } from "./Shared/SmoothScroll";
 
 
@@ -23,9 +24,19 @@ export default function App() {
     role: string;
     name: string;
     phone: string;
-  } | null>(null);
+  } | null>(() => {
+    const data = storage.getUserData();
+    if (data) {
+      return {
+        role: data.role,
+        name: data.name,
+        phone: data.phone || '',
+      };
+    }
+    return null;
+  });
 
-  const [selectedRole, setSelectedRole] = useState<string | null>(null);
+  const [selectedRole, setSelectedRole] = useState<string | null>(storage.getSelectedRole());
   const [isLoading, setIsLoading] = useState(true);
 
   // Validate token and restore user on mount
@@ -42,19 +53,19 @@ export default function App() {
       try {
         // Validate token by fetching user data
         const user = await authService.getMe();
+        const role = user.role || user.user_type || '';
         const userData = {
-          role: user.role,
+          role: role,
           name: user.name,
           phone: user.phone || '',
         };
         setCurrentUser(userData);
-        localStorage.setItem("currentUser", JSON.stringify(userData));
+        storage.setRole(role);
+        storage.setUserData(user);
       } catch (error) {
         console.error("Token validation failed:", error);
         // Clear invalid token
-        authService.removeToken();
-        localStorage.removeItem("currentUser");
-        localStorage.removeItem("selectedRole");
+        storage.clearAll();
       } finally {
         setIsLoading(false);
       }
@@ -65,28 +76,32 @@ export default function App() {
 
   const handleRoleSelect = useCallback((role: string) => {
     setSelectedRole(role);
-    localStorage.setItem("selectedRole", role);
+    storage.setSelectedRole(role);
   }, []);
 
   const handleLogin = useCallback((role: string, name: string, phone: string) => {
     const userData = { role, name, phone };
     setCurrentUser(userData);
-    localStorage.setItem("currentUser", JSON.stringify(userData));
-    sessionStorage.setItem("currentUser", JSON.stringify(userData));
-    localStorage.setItem("selectedRole", role);
-    setSelectedRole(null);
+    storage.setRole(role);
+    storage.setSelectedRole(role);
+    setSelectedRole(role);
   }, []);
 
   const handleLogout = useCallback(async () => {
     const { authService } = await import('./services/auth');
-    await authService.logout();
+    try {
+      await authService.logout();
+    } catch (e) {
+      console.error("Logout failed:", e);
+    }
+    storage.clearAll();
     setCurrentUser(null);
     setSelectedRole(null);
   }, []);
 
   const handleBackFromLogin = useCallback(() => {
     setSelectedRole(null);
-    localStorage.removeItem("selectedRole");
+    storage.removeSelectedRole();
   }, []);
 
   if (isLoading) {

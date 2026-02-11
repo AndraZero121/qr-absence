@@ -1,223 +1,114 @@
-# Deskta Login Credentials
+# Frontend Login Credentials
 
-## Test Accounts untuk Deskta Application
+## 🔐 Test Accounts
 
-### 🔐 Admin Account
-```
-Username: admin
-Email: admin@example.com
-Password: password123
-Role: Admin
-```
+Semua password: **password123**
 
-**Akses:**
-- Dashboard statistik sekolah
-- Management siswa, guru, kelas, jurusan (Phase 4 - belum diimplementasi)
-- Lihat semua data
+### Admin
+- Username: `admin`
+- Email: admin@example.com
 
----
+### Waka (Wakil Kepala Sekolah)
+- Username: `waka1`
+- Email: waka@example.com
 
-### 🎓 Waka (Wakil Kepala Sekolah)  
-```
-Username: waka1
-Email: waka@example.com
-Password: password123
-Role: Waka (Admin type)
-```
+### Guru
+- Username: `guru1`
+- Email: guru1@example.com
+- NIP: NIP-0001
 
-**Akses:**
-- Dashboard Waka
-- Monitoring kehadiran guru dan siswa
-- Laporan statistik
+### Wali Kelas
+- Username: `walikelas1`
+- Email: walikelas1@example.com
+- NIP: NIP-WALI-001
+- Kelas: XII TKJ 1
 
----
+### Siswa (Peserta Didik)
+- Username: `siswa1` | Email: siswa1@example.com | NIS: 2024001 | **NISN: 0024001** ⭐
+- Username: `siswa2` | Email: siswa2@example.com | NIS: 2024002 | **NISN: 0024002** ⭐
+- Username: `siswa3` | Email: siswa3@example.com | NIS: 2024003 | **NISN: 0024003** ⭐
 
-### 👨‍🏫 Guru Account
-```
-Username: guru1
-Email: guru1@example.com
-Password: password123
-Role: Guru (Teacher)
-NIP: NIP-0001
-Mata Pelajaran: Matematika
-```
+**Note:** Siswa bisa login dengan 3 cara:
+1. **NISN saja** (tanpa password) ⭐ *Cara termudah*
+2. **NIS + Password** (2024001 + password123)
+3. **Username + Password** (siswa1 + password123)
 
-**Akses:**
-- Dashboard jadwal mengajar
-- Lihat jadwal hari ini
-- Absensi siswa (QR scan - belum diimplementasi)
-- Input manual kehadiran
+### Pengurus Kelas
+- Username: `pengurus1`
+- Email: pengurus1@example.com
+- NIS: 2024999
+- **NISN: 0024999** ⭐
+
+**Note:** Pengurus kelas bisa login dengan 3 cara:
+1. **NISN saja** (tanpa password) ⭐ *Cara termudah*
+2. **NIS + Password** (2024999 + password123)
+3. **Username + Password** (pengurus1 + password123)
 
 ---
 
-### 👨‍🏫 Wali Kelas Account
-```
-Username: walikelas1
-Email: walikelas1@example.com
-Password: password123
-Role: Wali Kelas (Teacher)
-NIP: NIP-WALI-001
-Kelas: XII TKJ 1
-```
+## 🚀 Setup & Testing
 
-**Akses:**
-- Dashboard kelas wali
-- Data siswa kelas
-- Jadwal kelas
-- Rekap kehadiran kelas
-
----
-
-### 👨‍🎓 Siswa Accounts
-
-**Siswa 1:**
-```
-Username: siswa1
-Email: siswa1@example.com
-Password: password123
-NISN: 0024001
-NIS: 2024001
-Nama: Ahmad Rizki
-Kelas: XII TKJ 1
-```
-
-**Siswa 2:**
-```
-Username: siswa2
-Email: siswa2@example.com
-Password: password123
-NISN: 0024002
-NIS: 2024002
-Nama: Siti Nurhaliza
-Kelas: XII TKJ 1
-```
-
-**Siswa 3:**
-```
-Username: siswa3
-Email: siswa3@example.com
-Password: password123
-NISN: 0024003
-NIS: 2024003
-Nama: Budi Santoso
-Kelas: XII TKJ 1
-```
-
-**Akses:**
-- Dashboard siswa
-- Jadwal kelas hari ini
-- Statistik kehadiran pribadi
-- Chart kehadiran bulanan
-
-**Login Options:**
-1. **NISN saja** (tanpa password) - Masukkan: `0024001`, `0024002`, atau `0024003`
-2. **Username + Password** - Masukkan: `siswa1` + `password123`
-
----
-
-### 📝 Pengurus Kelas Account
-```
-Username: pengurus1
-Email: pengurus1@example.com
-Password: password123
-NISN: 0024999
-NIS: 2024999
-Nama: Ketua Kelas TKJ 1
-Kelas: XII TKJ 1
-```
-
-**Akses:**
-- Dashboard pengurus kelas
-- Generate QR untuk absensi
-- Lihat jadwal kelas
-- Rekap kehadiran kelas
-
-**Login Options:**
-1. **NISN saja** (tanpa password) - Masukkan: `0024999`
-2. **Username + Password** - Masukkan: `pengurus1` + `password123`
-
----
-
-### 📝 Notes
-
-**Database Status:**
-- ✅ Admin account: Seeded
-- ✅ Waka account: Seeded
-- ✅ Guru account: Seeded  
-- ✅ Wali Kelas account: Seeded
-- ✅ Siswa accounts (3): Seeded
-- ✅ Pengurus Kelas account: Seeded
-
-**Untuk reset database dengan semua seeder:**
+### 1. Install Dependencies
 ```bash
-php artisan migrate:fresh --seed
+cd frontend
+npm install
+# atau
+bun install
 ```
 
----
-
-## 🧪 Testing URLs
-
-**Frontend (Deskta):**
-```
-http://localhost:5173
+### 2. Start Development Server
+```bash
+npm run dev
+# atau
+bun run dev
 ```
 
-**Backend API:**
+### 3. Backend API
+Pastikan backend Laravel running di:
 ```
 http://127.0.0.1:8001
 ```
 
-**Test Login API:**
-```bash
-curl -X POST http://127.0.0.1:8001/api/auth/login \
-  -H "Content-Type: application/json" \
-  -d '{"login":"admin","password":"password123"}'
-```
+### 4. Test Login
+1. Buka aplikasi (biasanya http://localhost:5173)
+2. Pilih role (admin/guru/siswa/dll)
+3. Login dengan credentials di atas
+4. Verify data muncul dari API
 
 ---
 
-## 📊 Dashboard Features by Role
+## ✅ Yang Sudah Diupdate
 
-### Admin
-- ✅ Total Rombel, Siswa, Guru, Lab (dari API)
-- ⏳ CRUD Siswa, Guru, Kelas, Jurusan (Phase 4)
-
-### Guru
-- ✅ Jadwal mengajar hari ini (dari API)
-- ⏳ QR Scan untuk absensi (Phase 4)
-- ⏳ Input manual kehadiran (Phase 4)
-
-### Siswa
-- ✅ Jadwal kelas hari ini (dari API)
-- ✅ Statistik kehadiran (dari API)
-- ✅ Chart kehadiran bulanan
-
-### Wali Kelas
-- ✅ Info kelas wali (dari API)
-- ✅ Total siswa (dari API)
-- ✅ Jadwal kelas (dari API)
-
-### Waka & Pengurus Kelas
-- ✅ UI Dashboard (dummy data)
-- ⏳ API Integration (optional)
+1. ✅ Created API service layer (`src/services/api.js`, `src/services/auth.js`)
+2. ✅ Created constants (`src/utils/constants.js`)
+3. ✅ Updated LoginPage.jsx to use real API
+4. ✅ Created .env file with API URL
+5. ✅ Removed dummy data validation
 
 ---
 
-## 🔧 Troubleshooting
+## 📝 Notes
 
-**Login gagal?**
-1. Cek backend running: `http://127.0.0.1:8001`
-2. Cek database connection
-3. Cek credentials benar
-4. Lihat console browser untuk error
+- Login sekarang menggunakan **real backend API**
+- Token disimpan di localStorage
+- Auto-logout jika token invalid (401)
+- Error handling sudah diimplementasi
 
-**Data tidak muncul?**
-1. Cek Network tab di DevTools
-2. Verify API response
-3. Cek token tersimpan di localStorage
-4. Restart backend jika perlu
+**Last Updated:** 2026-02-10
 
 ---
 
-**Last Updated:** 2026-02-05
-**Status:** Ready for Testing ✅
+## 🔐 Login NISN Tanpa Password - AKTIF
+
+✅ **Fitur login dengan NISN saja (tanpa password) sudah aktif kembali!**
+
+Cara pakai:
+1. Pilih role "Siswa" atau "Pengurus Kelas"
+2. Masukkan NISN di field login
+3. Biarkan field password kosong
+4. Klik Login
+
+**Keamanan:**
+- Hanya siswa yang bisa login tanpa password
+- Guru, Admin, dan Waka WAJIB menggunakan password
+- Semua login tetap tercatat dan diaudit

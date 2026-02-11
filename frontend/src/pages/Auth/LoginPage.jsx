@@ -1,85 +1,73 @@
 import React, { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { FaUser, FaLock, FaEye, FaEyeSlash, FaArrowLeft, FaIdCard } from 'react-icons/fa';
-import PageWrapper from '../../components/ui/PageWrapper';
-import logo from "../../assets/logo.png"; // Assuming logo is available here
+import { authService } from '../../services/auth';
+import './LoginPage.css';
 
 const LoginPage = () => {
   const { role } = useParams();
   const navigate = useNavigate();
-
+  
   const [formData, setFormData] = useState({
     identifier: '',
     password: '',
+    additionalField: ''
   });
 
   const [error, setError] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const [loading, setLoading] = useState(false);
+  const [isLoggingIn, setIsLoggingIn] = useState(false);
 
-  // Configuration for each role
+  // Konfigurasi untuk setiap role
   const roleConfig = {
-    'admin': {
+    'admin': { 
       title: 'Admin',
-      color: 'text-red-600',
-      bgColor: 'bg-red-600',
-      gradient: 'from-red-50 to-red-100',
+      showWelcome: true,
       fields: [
-        { name: 'identifier', label: 'Nama Pengguna', placeholder: 'Masukkan username', type: 'text', icon: <FaUser /> },
-        { name: 'password', label: 'Kata Sandi', placeholder: 'Masukkan kata sandi', type: 'password', icon: <FaLock /> }
+        { name: 'identifier', label: 'Nama Pengguna', placeholder: 'Masukkan username', type: 'text' },
+        { name: 'password', label: 'Kata Sandi', placeholder: 'Masukkan kata sandi', type: 'password' }
       ],
       dashboard: '/admin/dashboard'
     },
-    'waka': {
+    'waka': { 
       title: 'Waka',
-      color: 'text-purple-600',
-      bgColor: 'bg-purple-600',
-      gradient: 'from-purple-50 to-purple-100',
+      showWelcome: true,
       fields: [
-        { name: 'identifier', label: 'Kode Guru', placeholder: 'Masukkan kode guru', type: 'text', icon: <FaIdCard /> },
-        { name: 'password', label: 'Kata Sandi', placeholder: 'Masukkan kata sandi', type: 'password', icon: <FaLock /> }
+        { name: 'identifier', label: 'Kode Guru', placeholder: 'Masukkan kode guru', type: 'text' },
+        { name: 'password', label: 'Kata Sandi', placeholder: 'Masukkan kata sandi', type: 'password' }
       ],
       dashboard: '/waka/dashboard'
     },
-    'peserta-didik': {
+    'peserta-didik': { 
       title: 'Peserta Didik',
-      color: 'text-cyan-600',
-      bgColor: 'bg-cyan-600',
-      gradient: 'from-cyan-50 to-cyan-100',
+      showWelcome: true,
       fields: [
-        { name: 'identifier', label: 'NISN', placeholder: 'Masukkan NISN', type: 'text', icon: <FaIdCard /> }
+        { name: 'identifier', label: 'NISN', placeholder: 'Masukkan NISN', type: 'text' }
       ],
       dashboard: '/siswa/dashboard'
     },
-    'guru': {
+    'guru': { 
       title: 'Guru',
-      color: 'text-blue-600',
-      bgColor: 'bg-blue-600',
-      gradient: 'from-blue-50 to-blue-100',
+      showWelcome: true,
       fields: [
-        { name: 'identifier', label: 'Kode Guru', placeholder: 'Masukkan kode guru', type: 'text', icon: <FaIdCard /> },
-        { name: 'password', label: 'Kata Sandi', placeholder: 'Masukkan password', type: 'password', icon: <FaLock /> }
+        { name: 'identifier', label: 'Kode Guru', placeholder: 'Masukkan kode guru', type: 'text' },
+        { name: 'password', label: 'Kata Sandi', placeholder: 'Masukkan password', type: 'password' }
       ],
       dashboard: '/guru/dashboard'
     },
-    'wali-kelas': {
+    'wali-kelas': { 
       title: 'Wali Kelas',
-      color: 'text-green-600',
-      bgColor: 'bg-green-600',
-      gradient: 'from-green-50 to-green-100',
+      showWelcome: true,
       fields: [
-        { name: 'identifier', label: 'Kode Guru', placeholder: 'Masukkan kode guru', type: 'text', icon: <FaIdCard /> },
-        { name: 'password', label: 'Kata Sandi', placeholder: 'Masukkan password', type: 'password', icon: <FaLock /> }
+        { name: 'identifier', label: 'Kode Guru', placeholder: 'Masukkan kode guru', type: 'text' },
+        { name: 'password', label: 'Kata Sandi', placeholder: 'Masukkan password', type: 'password' }
       ],
       dashboard: '/walikelas/dashboard'
     },
-    'pengurus-kelas': {
+    'pengurus-kelas': { 
       title: 'Pengurus Kelas',
-      color: 'text-orange-600',
-      bgColor: 'bg-orange-600',
-      gradient: 'from-orange-50 to-orange-100',
+      showWelcome: true,
       fields: [
-        { name: 'identifier', label: 'NISN', placeholder: 'Masukkan NISN', type: 'text', icon: <FaIdCard /> }
+        { name: 'identifier', label: 'NISN', placeholder: 'Masukkan NISN', type: 'text' }
       ],
       dashboard: '/pengurus-kelas/dashboard'
     }
@@ -90,152 +78,119 @@ const LoginPage = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
-    setLoading(true);
-
+    
     const emptyFields = config.fields.filter(field => !formData[field.name]);
     if (emptyFields.length > 0) {
-      setError('Mohon isi semua kolom yang tersedia.');
-      setLoading(false);
+      setError('Mohon isi semua field!');
       return;
     }
 
+    setIsLoggingIn(true);
     try {
-      // Simulate API call or use real service
-      const { authService } = await import('../../services/auth');
-
-      const { user } = await authService.login(
-        formData.identifier,
-        formData.password || '' 
-      );
-
-      console.log('Login berhasil sebagai', role, user);
-
-      localStorage.setItem('userRole', role);
-      localStorage.setItem('userIdentifier', formData.identifier);
-      localStorage.setItem('userName', user.name);
-      localStorage.setItem('userData', JSON.stringify(user));
-
+      const { user } = await authService.login(formData.identifier, formData.password);
+      console.log('Login berhasil sebagai', user.role, user);
+      
+      // Navigate ke dashboard berdasarkan role dari backend atau config
+      // Note: authService.login sudah menyimpan role & data ke localStorage
       navigate(config.dashboard);
-    } catch (error) {
-      console.error('Login error:', error);
-      if (error.response?.status === 422) {
-        setError('Data kredensial tidak cocok atau akun tidak aktif.');
-      } else if (error.response?.data?.message) {
-        setError(error.response.data.message);
-      } else {
-        // Fallback for demo/development if service fails
-        // Remove this block in production and handle error properly
-        if (process.env.NODE_ENV !== 'production' && !error.response) {
-            console.warn("Dev mode: Bypass login for testing UI");
-            localStorage.setItem('userRole', role);
-            localStorage.setItem('userIdentifier', formData.identifier);
-            localStorage.setItem('userName', 'Test User');
-            localStorage.setItem('userData', JSON.stringify({ name: 'Test User', role: role }));
-            navigate(config.dashboard);
-            return;
-        }
-        setError('Terjadi kesalahan koneksi. Silakan coba lagi.');
-      }
+    } catch (err) {
+      console.error('Login error:', err);
+      const message = err.response?.data?.message || 'NISN tidak ditemukan atau data login salah!';
+      setError(message);
     } finally {
-        setLoading(false);
+      setIsLoggingIn(false);
     }
   };
 
+  const handleBack = () => {
+    navigate('/');
+  };
+
   const handleInputChange = (fieldName, value) => {
-    setFormData({ ...formData, [fieldName]: value });
+    setFormData({...formData, [fieldName]: value});
     setError('');
   };
 
+  const togglePasswordVisibility = () => {
+    setShowPassword(!showPassword);
+  };
+
   return (
-    <PageWrapper className={`min-h-screen bg-gradient-to-br ${config.gradient} flex items-center justify-center p-4 font-sans`}>
-      
-      <div className="w-full max-w-md">
-        {/* Header Section */}
-        <div className="text-center mb-8 animate-fade-in-down">
-          <div className="inline-block bg-white p-3 rounded-2xl shadow-md mb-4">
-             <img src={logo} alt="Logo" className="w-12 h-12 object-contain" />
-          </div>
-          <h1 className="text-2xl font-bold text-gray-800">Selamat Datang</h1>
-          <p className="text-gray-500 text-sm mt-1">Silakan masuk ke akun <span className={`font-bold ${config.color}`}>{config.title}</span> Anda</p>
+    <div className="login-page-container">
+      {/* Header diluar box */}
+      {config.showWelcome && (
+        <div className="login-header">
+          <h1 className="welcome-title">Selamat Datang</h1>
+          <h1 className="welcome-subtitle">di Presensi Pembelajaran Digital</h1>
         </div>
+      )}
 
-        {/* Card */}
-        <div className="bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden">
-          
-          {/* Top Decorative Bar */}
-          <div className={`h-2 w-full ${config.bgColor}`}></div>
+      {/* Box form */}
+      <div className="login-box">
+        {/* Role Title */}
+        <h3 className="role-title">{config.title}</h3>
 
-          <div className="p-8">
-            <form onSubmit={handleSubmit} className="space-y-5">
-              
-              {/* Error Message */}
-              {error && (
-                <div className="bg-red-50 border-l-4 border-red-500 text-red-700 p-3 rounded text-sm flex items-start gap-2 animate-shake">
-                   <FaEye className="mt-0.5" />
-                   <span>{error}</span>
-                </div>
-              )}
+        <form onSubmit={handleSubmit} className="login-form">
+          {/* Tampilkan error jika ada */}
+          {error && (
+            <div className="error-message">
+              {error}
+            </div>
+          )}
 
-              {config.fields.map((field, index) => (
-                <div key={index} className="space-y-1.5">
-                  <label className="text-sm font-semibold text-gray-700 ml-1 block">
-                    {field.label}
-                  </label>
-                  <div className="relative group">
-                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400 group-focus-within:text-indigo-500 transition-colors">
-                      {field.icon}
-                    </div>
-                    <input
-                      type={field.type === 'password' && showPassword ? 'text' : field.type}
-                      placeholder={field.placeholder}
-                      value={formData[field.name]}
-                      onChange={(e) => handleInputChange(field.name, e.target.value)}
-                      className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all bg-gray-50 focus:bg-white text-gray-800 placeholder-gray-400 text-sm"
-                      required
-                    />
-                    
-                    {field.type === 'password' && (
-                      <button
-                        type="button"
-                        onClick={() => setShowPassword(!showPassword)}
-                        className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600 focus:outline-none"
-                      >
-                        {showPassword ? <FaEyeSlash /> : <FaEye />}
-                      </button>
+          {config.fields.map((field, index) => (
+            <div key={index} className="form-group">
+              <label className="form-label">{field.label}</label>
+              <div className="input-wrapper">
+                <input 
+                  type={field.type === 'password' && showPassword ? 'text' : field.type}
+                  placeholder={field.placeholder}
+                  value={formData[field.name]}
+                  onChange={(e) => handleInputChange(field.name, e.target.value)}
+                  className="form-input"
+                  required
+                  disabled={isLoggingIn}
+                />
+                {/* Toggle password visibility hanya untuk field password */}
+                {field.type === 'password' && (
+                  <button 
+                    type="button"
+                    onClick={togglePasswordVisibility}
+                    className="password-toggle"
+                    aria-label={showPassword ? "Sembunyikan password" : "Tampilkan password"}
+                    disabled={isLoggingIn}
+                  >
+                    {showPassword ? (
+                      // Eye slash icon (hide)
+                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/>
+                        <line x1="1" y1="1" x2="23" y2="23"/>
+                      </svg>
+                    ) : (
+                      // Eye icon (show)
+                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                        <circle cx="12" cy="12" r="3"/>
+                      </svg>
                     )}
-                  </div>
-                </div>
-              ))}
-
-              <button
-                type="submit"
-                disabled={loading}
-                className={`w-full py-3.5 px-4 rounded-xl text-white font-bold text-sm uppercase tracking-wide shadow-lg transform transition-all hover:-translate-y-1 hover:shadow-xl focus:ring-2 focus:ring-offset-2 ${config.bgColor} opacity-90 hover:opacity-100`}
-              >
-                {loading ? (
-                    <span className="flex items-center justify-center gap-2">
-                        <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                        </svg>
-                        Memproses...
-                    </span>
-                ) : "Masuk Sekarang"}
-              </button>
-            </form>
-          </div>
+                  </button>
+                )}
+              </div>
+            </div>
+          ))}
           
-          <div className="bg-gray-50 px-8 py-4 border-t border-gray-100 flex justify-center">
-            <button 
-                onClick={() => navigate('/')} 
-                className="text-gray-500 hover:text-gray-800 text-sm font-medium flex items-center gap-2 transition-colors"
-            >
-                <FaArrowLeft size={12} /> Kembali ke Beranda
+          <div className="button-group">
+            <button type="button" onClick={handleBack} className="back-button" disabled={isLoggingIn}>
+              Kembali
+            </button>
+            
+            <button type="submit" className="login-button" disabled={isLoggingIn}>
+              {isLoggingIn ? 'Memproses...' : 'Masuk'}
             </button>
           </div>
-        </div>
+        </form>
       </div>
-    </PageWrapper>
+    </div>
   );
 };
 

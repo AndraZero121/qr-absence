@@ -1,55 +1,56 @@
 import apiClient from './api';
 
 // Attendance API Functions
-export const getMyAttendanceHistory = async (params = {}) => {
-    const response = await apiClient.get('attendance/me', { params });
+export const getMyAttendanceHistory = async (options = {}) => {
+    const response = await apiClient.get('attendance/me', options);
     return response.data;
 };
 
-export const getMyAttendanceSummary = async (params = {}) => {
-    const response = await apiClient.get('attendance/me/summary', { params });
+export const getMyAttendanceSummary = async (options = {}) => {
+    const response = await apiClient.get('me/attendance/summary', options);
     return response.data;
 };
 
-export const getTeachingAttendance = async (params = {}) => {
-    const response = await apiClient.get('attendance/me/teaching', { params });
+export const getTeachingAttendance = async (options = {}) => {
+    const response = await apiClient.get('attendance/me/teaching', options);
     return response.data;
 };
 
-export const getTeachingSummary = async (params = {}) => {
-    const response = await apiClient.get('attendance/me/teaching/summary', { params });
+export const getTeachingSummary = async (options = {}) => {
+    const response = await apiClient.get('attendance/me/teaching/summary', options);
     return response.data;
 };
 
-export const getClassAttendanceByDate = async (classId, date) => {
+export const getClassAttendanceByDate = async (classId, date, options = {}) => {
     const response = await apiClient.get(`attendance/class/${classId}/by-date`, {
+        ...options,
         params: { date }
     });
     return response.data;
 };
 
-export const getClassStudentsSummary = async (classId, params = {}) => {
-    const response = await apiClient.get(`attendance/class/${classId}/students/summary`, { params });
+export const getClassStudentsSummary = async (classId, options = {}) => {
+    const response = await apiClient.get(`attendance/class/${classId}/students/summary`, options);
     return response.data;
 };
 
-export const getClassStudentsAbsences = async (classId, params = {}) => {
-    const response = await apiClient.get(`attendance/class/${classId}/students/absences`, { params });
+export const getClassStudentsAbsences = async (classId, options = {}) => {
+    const response = await apiClient.get(`attendance/class/${classId}/students/absences`, options);
     return response.data;
 };
 
-export const getHomeroomDashboard = async (params = {}) => {
-    const response = await apiClient.get('me/homeroom/dashboard', { params });
+export const getHomeroomDashboard = async (options = {}) => {
+    const response = await apiClient.get('me/homeroom/dashboard', options);
     return response.data;
 };
 
-export const getStudentClassDashboard = async (params = {}) => {
-    const response = await apiClient.get('me/class', { params });
+export const getStudentClassDashboard = async (options = {}) => {
+    const response = await apiClient.get('me/class', options);
     return response.data;
 };
 
-export const getTeacherSchedules = async (params = {}) => {
-    const response = await apiClient.get('schedules', { params });
+export const getTeacherSchedules = async (options = {}) => {
+    const response = await apiClient.get('schedules', options);
     return response.data.data ? response.data.data : response.data;
 };
 
@@ -58,13 +59,13 @@ export const createManualAttendance = async (data) => {
     return response.data;
 };
 
-export const getAttendanceBySchedule = async (scheduleId) => {
-    const response = await apiClient.get(`attendance/schedule/${scheduleId}`);
+export const getAttendanceBySchedule = async (scheduleId, options = {}) => {
+    const response = await apiClient.get(`attendance/schedule/${scheduleId}`, options);
     return response.data.data ? response.data.data : response.data;
 };
 
-export const getClassSchedules = async (classId) => {
-    const response = await apiClient.get(`classes/${classId}/schedules`);
+export const getClassSchedules = async (classId, options = {}) => {
+    const response = await apiClient.get(`classes/${classId}/schedules`, options);
     return response.data;
 };
 
@@ -89,7 +90,15 @@ const attendanceService = {
     getTeacherSchedules,
     getAttendanceBySchedule,
     getClassSchedules,
-    getClassScheduleImage
+    getClassScheduleImage,
+    getTeacherDashboard: async (options = {}) => {
+        const response = await apiClient.get('me/teacher/dashboard', options);
+        return response.data;
+    },
+    getClassDashboard: async (options = {}) => {
+        const response = await apiClient.get('me/class/dashboard', options);
+        return response.data;
+    }
 };
 
 export default attendanceService;

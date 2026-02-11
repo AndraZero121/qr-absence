@@ -120,7 +120,7 @@ export function KehadiranSiswaWakel({
 
         if (Array.isArray(data)) {
           mappedRows = data.map((item: any) => ({
-            id: item.id?.toString() || `temp-${Math.random()}`,
+            id: item.id?.toString() || `att-${item.student_id}-${item.schedule_id}`,
             studentId: item.student_id?.toString(),
             scheduleId: item.schedule_id,
             nisn: item.student?.nisn || '-',
@@ -208,7 +208,7 @@ export function KehadiranSiswaWakel({
 
   const filteredRows = useMemo(() => {
     // Filter mapel
-    let filtered = selectedMapel === 'all' ? rows : rows.filter((r) => r.mataPelajaran === selectedMapel);
+    const filtered = selectedMapel === 'all' ? rows : rows.filter((r) => r.mataPelajaran === selectedMapel);
     return filtered;
   }, [rows, selectedMapel]);
 

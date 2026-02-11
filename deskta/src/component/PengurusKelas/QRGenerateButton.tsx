@@ -3,22 +3,23 @@ import { Modal } from '../Shared/Modal';
 import QRCodeDisplay from '../Shared/QRCodeDisplay';
 import { dashboardService } from '../../services/dashboard';
 import { usePopup } from '../Shared/Popup/PopupProvider';
+import type { Schedule, QrCode } from '../../types/api';
 
 interface QRGenerateButtonProps {
-    schedules: any[];
+    schedules: Schedule[];
 }
 
 export default function QRGenerateButton({ schedules }: QRGenerateButtonProps) {
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [isSelectModalOpen, setIsSelectModalOpen] = useState(false);
-    const [qrData, setQrData] = useState<any>(null);
+    const [qrData, setQrData] = useState<QrCode | null>(null);
     const [isGenerating, setIsGenerating] = useState(false);
     const { alert: popupAlert } = usePopup();
 
     const handleGenerateQR = async (scheduleId: number) => {
         try {
             setIsGenerating(true);
-            const result = await dashboardService.generateQRCode({
+            const result: QrCode = await dashboardService.generateQRCode({
                 schedule_id: scheduleId,
                 type: 'student',
                 expires_in_minutes: 30, // 30 minutes validity
@@ -36,10 +37,10 @@ export default function QRGenerateButton({ schedules }: QRGenerateButtonProps) {
         }
     };
 
-    const todaySchedules = schedules.filter((s: any) => {
+    const todaySchedules = schedules.filter((s) => {
         const now = new Date();
         const scheduleTime = new Date();
-        const [hours, minutes] = (s.start_time || s.start || '00:00').split(':');
+        const [hours, minutes] = (s.start_time || '00:00').split(':');
         scheduleTime.setHours(parseInt(hours), parseInt(minutes));
 
         // Show schedules within 1 hour before start time

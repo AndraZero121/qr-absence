@@ -1,5 +1,5 @@
 ﻿import { useState, useEffect } from "react";
-import SiswaLayout from "../../component/Siswa/SiswaLayout";
+import SiswaLayout, { type MenuKey } from "../../component/Siswa/SiswaLayout";
 // import openBook from "../../assets/Icon/open-book.png";
 import { Modal } from "../../component/Shared/Modal";
 import JadwalSiswa from "./JadwalSiswa.tsx";
@@ -7,6 +7,7 @@ import AbsensiSiswa from "./AbsensiSiswa";
 import logoSmk from "../../assets/Icon/logo smk.png";
 import { usePopup } from "../../component/Shared/Popup/PopupProvider";
 import QRScanButton from "../../component/Siswa/QRScanButton";
+import { isCancellation } from "../../utils/errorHelpers";
 import {
   Bell,
   Megaphone,
@@ -46,7 +47,7 @@ ChartJS.register(
   Filler
 );
 
-type SiswaPage = "dashboard" | "jadwal-anda" | "notifikasi" | "absensi";
+type SiswaPage = MenuKey;
 
 interface ScheduleItem {
   id: string;
@@ -63,13 +64,16 @@ interface DashboardSiswaProps {
 
 // Helper to format schedule from API
 const formatScheduleFromAPI = (schedule: any): ScheduleItem => {
-  const timeSlot = schedule.time_slot;
+  // API returns start_time/end_time directly as strings (HH:mm:ss)
+  const start = schedule.start_time?.substring(0, 5) || '00:00';
+  const end = schedule.end_time?.substring(0, 5) || '00:00';
+  
   return {
     id: schedule.id.toString(),
-    mapel: schedule.subject?.name || 'Mata Pelajaran',
-    guru: schedule.teacher?.name || 'Guru',
-    start: timeSlot?.start_time || '00:00',
-    end: timeSlot?.end_time || '00:00',
+    mapel: schedule.subject_name || schedule.subject?.name || 'Mata Pelajaran',
+    guru: schedule.teacher?.user?.name || schedule.teacher?.name || 'Guru',
+    start,
+    end,
   };
 };
 
@@ -92,6 +96,7 @@ export default function DashboardSiswa({ user, onLogout }: DashboardSiswaProps) 
     dispen: 0,
   });
   const [isLoadingAttendance, setIsLoadingAttendance] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     const updateDateTime = () => {
@@ -119,28 +124,45 @@ export default function DashboardSiswa({ user, onLogout }: DashboardSiswaProps) 
 
   // Fetch schedules
   useEffect(() => {
+    const controller = new AbortController();
     const fetchSchedules = async () => {
       try {
+        setIsLoadingSchedules(true);
+        setError(null);
         const { dashboardService } = await import('../../services/dashboard');
         const today = new Date().toISOString().split('T')[0];
-        const data = await dashboardService.getMySchedules({ date: today });
+        const data = await dashboardService.getMySchedules(
+          { date: today },
+          { signal: controller.signal }
+        );
         const formattedSchedules = data.map(formatScheduleFromAPI);
         setSchedules(formattedSchedules);
-      } catch (error) {
-        console.error('Failed to fetch schedules:', error);
+      } catch (error: any) {
+        if (!isCancellation(error)) {
+          console.error('Failed to fetch schedules:', error);
+          setError('Gagal memuat jadwal pelajaran.');
+        }
       } finally {
-        setIsLoadingSchedules(false);
+        if (!controller.signal.aborted) {
+          setIsLoadingSchedules(false);
+        }
       }
     };
     fetchSchedules();
+    return () => controller.abort();
   }, []);
 
   // Fetch attendance summary
   useEffect(() => {
+    const controller = new AbortController();
     const fetchAttendance = async () => {
       try {
+        setIsLoadingAttendance(true);
         const { dashboardService } = await import('../../services/dashboard');
-        const data = await dashboardService.getMyAttendanceSummary();
+        const data = await dashboardService.getMyAttendanceSummary(
+          {},
+          { signal: controller.signal }
+        );
         setAttendanceSummary({
           hadir: data.present || 0,
           izin: data.excused || 0,
@@ -148,13 +170,19 @@ export default function DashboardSiswa({ user, onLogout }: DashboardSiswaProps) 
           alpha: data.absent || 0,
           dispen: (data as any).dispensation || 0,
         });
-      } catch (error) {
-        console.error('Failed to fetch attendance:', error);
+      } catch (error: any) {
+        if (!isCancellation(error)) {
+          console.error('Failed to fetch attendance:', error);
+          setError((prev) => prev || 'Gagal memuat ringkasan kehadiran.');
+        }
       } finally {
-        setIsLoadingAttendance(false);
+        if (!controller.signal.aborted) {
+          setIsLoadingAttendance(false);
+        }
       }
     };
     fetchAttendance();
+    return () => controller.abort();
   }, []);
 
   const handleMenuClick = (page: string) => {
@@ -294,6 +322,25 @@ export default function DashboardSiswa({ user, onLogout }: DashboardSiswaProps) 
                 gap: "28px",
               }}
             >
+              {/* Error Alert */}
+              {error && (
+                <div style={{
+                  padding: "16px 20px",
+                  backgroundColor: "#FEF2F2",
+                  border: "1px solid #FEE2E2",
+                  borderRadius: "12px",
+                  color: "#B91C1C",
+                  fontSize: "14px",
+                  fontWeight: "600",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "12px"
+                }}>
+                  <Megaphone size={20} />
+                  <span>{error}</span>
+                </div>
+              )}
+
               {/* Welcome Section */}
               <div style={{
                 backgroundColor: "white",
@@ -301,6 +348,7 @@ export default function DashboardSiswa({ user, onLogout }: DashboardSiswaProps) 
                 padding: "28px 32px",
                 boxShadow: "0 4px 20px rgba(0, 31, 62, 0.08)",
                 border: "1px solid #E5E7EB",
+                opacity: isLoadingSchedules || isLoadingAttendance ? 0.7 : 1,
               }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "20px" }}>
                   <div>

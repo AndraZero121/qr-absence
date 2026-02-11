@@ -28,7 +28,9 @@ export default function QRScanButton({ onSuccess }: QRScanButtonProps) {
 
             setIsModalOpen(false);
             onSuccess?.();
-        } catch (error: any) {
+        } catch (err: unknown) {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const error = err as any;
             popupAlert(error.response?.data?.message || 'QR Code tidak valid atau sudah kadaluarsa', {
                 title: '❌ Gagal Absen',
             });

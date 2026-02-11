@@ -131,7 +131,7 @@ export default function DaftarKetidakhadiranWaliKelas({
 
   const StatusButton = ({ status, row }: { status: StatusKehadiran; row: RowKehadiran }) => {
     let bgColor = COLORS.ALFA;
-    let label = status;
+    const label = status;
     const textColor = "#FFFFFF";
 
     switch (status) {

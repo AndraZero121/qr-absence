@@ -4,6 +4,10 @@ import { useNavigate } from "react-router-dom";
 import StaffLayout from "../../component/WakaStaff/StaffLayout";
 import { Table } from "../../component/Shared/Table";
 import { Eye, Search } from "lucide-react";
+import { getStatusConfig } from "../../utils/statusMapping";
+import LoadingState from "../../component/Shared/LoadingState";
+import ErrorState from "../../component/Shared/ErrorState";
+import { isCancellation } from "../../utils/errorHelpers";
 
 type StatusType =
   | "hadir"
@@ -11,20 +15,23 @@ type StatusType =
   | "tidak-hadir"
   | "sakit"
   | "izin"
-  | "alpha";
+  | "alpha"
+  | "pulang";
 
 interface KehadiranGuruProps {
   user: { name: string; role: string };
   onLogout: () => void;
   currentPage: string;
   onMenuClick: (page: string) => void;
-  onNavigateToDetail?: (guruId: string, guruName: string) => void;
+  onNavigateToDetail: (guruId: string, guruName: string, noIdentitas?: string) => void;
 }
 
 interface KehadiranGuruRow {
   id: string;
   namaGuru: string;
   jadwal: string;
+  noIdentitas?: string;
+  nip?: string;
   kehadiranJam: StatusType[];
 }
 
@@ -39,9 +46,13 @@ export default function KehadiranGuru({
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
   const [search, setSearch] = useState("");
 
+  const [rows, setRows] = useState<KehadiranGuruRow[]>([]);
+
   const [selectedTanggal, setSelectedTanggal] = useState(
     new Date().toISOString().slice(0, 10)
   );
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     const handleResize = () => setIsMobile(window.innerWidth < 768);
@@ -49,28 +60,50 @@ export default function KehadiranGuru({
     return () => window.removeEventListener("resize", handleResize);
   }, []);
 
-  const [rows] = useState<KehadiranGuruRow[]>([
-    {
-      id: "1",
-      namaGuru: "Alifah Diantebes Aindra S.pd",
-      jadwal: "XII RPL 2",
-      kehadiranJam: [
-        "hadir","hadir","hadir","hadir",
-        "izin","izin","terlambat","terlambat",
-        "tidak-hadir","tidak-hadir",
-      ],
-    },
-    {
-      id: "2",
-      namaGuru: "Ewit Erniyah S.pd",
-      jadwal: "XII RPL 2",
-      kehadiranJam: [
-        "hadir","hadir","hadir","hadir",
-        "hadir","hadir","izin","izin",
-        "alpha","alpha",
-      ],
-    },
-  ]);
+  useEffect(() => {
+    const controller = new AbortController();
+
+    const fetchData = async () => {
+      setLoading(true);
+      try {
+        const { dashboardService } = await import("../../services/dashboard");
+        const response: any = await dashboardService.getTeachersDailyAttendance({ date: selectedTanggal }, { signal: controller.signal });
+
+        const apiItems = response.items?.data || response.items || [];
+
+        const mappedRows: KehadiranGuruRow[] = apiItems.map((item: any) => {
+          const status = item.status || (item.attendance?.status) || 'absent';
+          let displayStatus: StatusType = 'alpha';
+          if (status === 'present') displayStatus = 'hadir';
+          else if (status === 'late') displayStatus = 'terlambat';
+          else if (status === 'sick' || status === 'sakit') displayStatus = 'sakit';
+          else if (status === 'excused' || status === 'izin') displayStatus = 'izin';
+          else if (status === 'return' || status === 'pulang') displayStatus = 'pulang';
+
+          return {
+            id: (item.teacher?.id || item.id).toString(),
+            namaGuru: item.teacher?.user?.name || item.teacher?.name || "Guru",
+            noIdentitas: item.teacher?.nip || item.teacher?.no_identitas,
+            nip: item.teacher?.nip,
+            jadwal: item.teacher?.subject || "-",
+            kehadiranJam: Array(10).fill(displayStatus),
+          };
+        });
+
+        setRows(mappedRows);
+      } catch (error: any) {
+        if (!isCancellation(error)) {
+          console.error("Failed to fetch teacher attendance", error);
+          setError("Gagal memuat data kehadiran guru. Silakan coba lagi.");
+        }
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchData();
+    return () => controller.abort();
+  }, [selectedTanggal]);
 
   const filteredRows = useMemo(() => {
     if (!search) return rows;
@@ -80,14 +113,7 @@ export default function KehadiranGuru({
   }, [rows, search]);
 
   const renderStatusBar = (data: StatusType[]) => {
-    const statusColors: Record<string, string> = {
-      "hadir": "#1FA83D",          // HIJAU - Hadir
-      "terlambat": "#ACA40D",      // KUNING - Terlambat
-      "izin": "#ACA40D",           // KUNING - Izin
-      "sakit": "#520C8F",          // UNGU - Sakit
-      "tidak-hadir": "#D90000",    // MERAH - Tidak Hadir
-      "alpha": "#D90000",          // MERAH - Alpha
-    };
+    // const statusColors removed - using utility
 
     return (
       <div style={{ display: "flex", justifyContent: "center" }}>
@@ -103,7 +129,7 @@ export default function KehadiranGuru({
         >
           {Array.from({ length: 10 }).map((_, i) => {
             const status = data[i];
-            const color = statusColors[status] || "#D90000";
+            const color = getStatusConfig(status).color;
 
             return (
               <div
@@ -134,11 +160,11 @@ export default function KehadiranGuru({
       onNavigateToDetail(row.id, row.namaGuru);
     } else {
       navigate(`/waka/kehadiran/detail/${row.id}`, {
-        state: { 
-          guru: row, 
+        state: {
+          guru: row,
           selectedTanggal,
           guruId: row.id,
-          guruName: row.namaGuru 
+          guruName: row.namaGuru
         },
       });
     }
@@ -250,14 +276,21 @@ export default function KehadiranGuru({
           borderRadius: 12,
           border: "1px solid #E5E7EB",
           padding: isMobile ? 16 : 32,
+          position: "relative"
         }}
       >
-        <Table
-          columns={columns}
-          data={filteredRows}
-          keyField="id"
-          emptyMessage="Belum ada data kehadiran guru."
-        />
+        {loading ? (
+             <LoadingState />
+        ) : error ? (
+             <ErrorState message={error} onRetry={() => setSelectedTanggal(selectedTanggal)} />
+        ) : (
+          <Table
+            columns={columns}
+            data={filteredRows}
+            keyField="id"
+            emptyMessage="Belum ada data kehadiran guru."
+          />
+        )}
       </div>
     </StaffLayout>
   );

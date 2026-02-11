@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from "react";
-import SiswaLayout from "../../component/Siswa/SiswaLayout";
+import SiswaLayout, { type MenuKey } from "../../component/Siswa/SiswaLayout";
 import { Select } from "../../component/Shared/Select";
 import { Modal } from "../../component/Shared/Modal";
 
@@ -122,7 +122,7 @@ function XIcon({ size = 24 }: { size?: number }) {
 // Interface untuk props
 interface AbsensiSiswaProps {
   user?: { name: string; phone: string; role?: string };
-  currentPage?: string;
+  currentPage?: MenuKey;
   onMenuClick?: (page: string) => void;
   onLogout?: () => void;
 }
@@ -142,13 +142,14 @@ export default function AbsensiSiswa({
   const [records, setRecords] = useState<AbsensiRecord[]>([]);
 
   useEffect(() => {
+    const controller = new AbortController();
     const fetchData = async () => {
       try {
         const { attendanceService } = await import('../../services/attendance');
         const response = await attendanceService.getMyAttendance({
           from: startDate,
           to: endDate
-        });
+        }, { signal: controller.signal });
         const data = response.data || response;
         const apiRecords = Array.isArray(data.data) ? data.data : (Array.isArray(data) ? data : []);
 
@@ -171,11 +172,14 @@ export default function AbsensiSiswa({
         });
         setRecords(mapped);
 
-      } catch (e) {
-        console.error(e);
+      } catch (e: any) {
+        if (e.name !== 'AbortError') {
+          console.error(e);
+        }
       }
     };
     fetchData();
+    return () => controller.abort();
   }, [startDate, endDate]);
 
   const filteredData = useMemo(() => {
@@ -221,7 +225,7 @@ export default function AbsensiSiswa({
   const StatusButton = ({ status, row }: { status: string; row: AbsensiRecord }) => {
     let bgColor = "#D90000"; // REVISI: Tidak Hadir > #D90000
     let label = "Tidak Hadir";
-    let textColor = "#FFFFFF";
+    const textColor = "#FFFFFF";
 
 
     // Actually STATUS_COLORS_HEX keys are 'present', 'sick' etc.
@@ -396,7 +400,7 @@ export default function AbsensiSiswa({
     <>
       <SiswaLayout
         pageTitle="Daftar Ketidakhadiran"
-        currentPage={currentPage as any}
+        currentPage={currentPage}
         onMenuClick={onMenuClick}
         user={user}
         onLogout={onLogout}
